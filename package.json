@@ -1,0 +1,26 @@
+{
+  "name": "lift2lift",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ski carpools for Colorado college students. Next.js web + Expo iOS, one shared React Native codebase, Supabase backend.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:status": "supabase status",
+    "db:link": "supabase link --project-ref aqoqfsesceiykkoahnej",
+    "db:push": "supabase db push",
+    "web": "npm run dev -w @lift2lift/web",
+    "web:build": "npm run build -w @lift2lift/web",
+    "ios": "npm run ios -w @lift2lift/mobile",
+    "mobile": "npm run start -w @lift2lift/mobile"
+  },
+  "devDependencies": {
+    "supabase": "^2.20.0",
+    "typescript": "~5.9.2"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "Lift2Lift",
+    "slug": "lift2lift",
+    "scheme": "lift2lift",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.zatzworks.lift2lift",
+      "supportsTablet": false
+    },
+    "plugins": ["expo-router"]
+  }
+}
