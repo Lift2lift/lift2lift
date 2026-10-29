@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Platform, Text, TextInput, View } from 'react-native';
 import { Brand, Button, Field, FormScreen, Heading, Notice, TextLink } from '../components/ui';
 import { MIN_PASSWORD_LENGTH, REQUIRE_EDU_EMAIL } from '../lib/config';
 import { isValidEmail } from '../lib/errors';
@@ -19,6 +19,35 @@ const emailProps = {
 function Footer({ children }: { children: ReactNode }) {
   const t = useTheme();
   return <Text style={{ color: t.muted, textAlign: 'center', fontSize: 15 }}>{children}</Text>;
+}
+
+/** "Continue with Google", web only for now (iOS needs a native auth session). */
+function GoogleButton({ onError }: { onError: (msg: string) => void }) {
+  const api = useApi();
+  const t = useTheme();
+  const [loading, setLoading] = useState(false);
+  if (Platform.OS !== 'web') return null;
+
+  async function go() {
+    setLoading(true);
+    try {
+      await api.signInWithGoogle(); // the page leaves for Google on success
+    } catch (e) {
+      onError((e as Error).message);
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flex: 1, height: 1, backgroundColor: t.line }} />
+        <Text style={{ color: t.muted, fontSize: 13 }}>or</Text>
+        <View style={{ flex: 1, height: 1, backgroundColor: t.line }} />
+      </View>
+      <Button title="Continue with Google" variant="ghost" onPress={go} loading={loading} />
+    </>
+  );
 }
 
 /* ---------------- Sign in ---------------- */
@@ -73,6 +102,7 @@ export function SignInScreen() {
         <TextLink onPress={() => nav.push('/forgot-password', { email: email.trim() })}>Forgot password?</TextLink>
       </View>
       <Button title="Sign in" onPress={submit} loading={loading} />
+      <GoogleButton onError={setError} />
       <Footer>
         New here? <TextLink onPress={() => nav.push('/sign-up')}>Create an account</TextLink>
       </Footer>
@@ -150,6 +180,7 @@ export function SignUpScreen() {
         onSubmitEditing={submit}
       />
       <Button title="Create account" onPress={submit} loading={loading} />
+      <GoogleButton onError={setError} />
       <Footer>
         Already have an account? <TextLink onPress={() => nav.replace('/sign-in')}>Sign in</TextLink>
       </Footer>

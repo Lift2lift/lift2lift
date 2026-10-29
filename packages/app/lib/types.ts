@@ -60,6 +60,8 @@ export interface Api {
   getSession(): Promise<Session | null>;
   onAuthChange(listener: (session: Session | null) => void): () => void;
   signIn(email: string, password: string): Promise<void>;
+  /** Web only: redirects the page to Google, then back here signed in. */
+  signInWithGoogle(): Promise<void>;
   signUp(name: string, email: string, password: string): Promise<{ needsVerification: boolean }>;
   verifySignup(email: string, code: string): Promise<void>;
   resendSignup(email: string): Promise<void>;

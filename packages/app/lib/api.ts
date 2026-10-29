@@ -77,6 +77,10 @@ export function createApi(supabase: SupabaseClient): Api {
     async signIn(email, password) {
       check(await supabase.auth.signInWithPassword({ email, password }));
     },
+    async signInWithGoogle() {
+      const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+      check(await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } }));
+    },
     async signUp(name, email, password) {
       const { data } = check(await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } }));
       return { needsVerification: !data.session };
