@@ -3,6 +3,7 @@ import { Platform, Text, View } from 'react-native';
 import { clock, driveText, DOW, isoDay, MON } from '../lib/dates';
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID } from '../lib/resorts';
+import { bookingClosed } from '../lib/rules';
 import { useTheme } from '../lib/theme';
 import type { BoardRide, Forecast } from '../lib/types';
 import { useApi, useAuth } from '../providers';
@@ -13,8 +14,11 @@ export function RideCard({
   forecast,
   onChanged,
   onMessage,
+  busyDays,
 }: {
   ride: BoardRide;
+  /** Days (YYYY-MM-DD) the viewer already drives or rides: one ride per person per day. */
+  busyDays: Set<string>;
   forecast: Forecast | null;
   onChanged: () => void;
   onMessage: (text: string, kind?: 'error' | 'success') => void;
@@ -34,6 +38,8 @@ export function RideCard({
   const riding = !!me && ride.riderIds.includes(me);
   const left = Math.max(0, ride.seatsTotal - ride.seatsTaken);
   const wx = forecastFor(forecast, ride.resortId, day);
+  const closed = bookingClosed(ride.departAt);
+  const busyThatDay = !mine && !riding && busyDays.has(ride.rideDate);
 
   async function run(action: () => Promise<void>, success: string) {
     setBusy(true);
@@ -85,11 +91,12 @@ export function RideCard({
       />
     );
   } else {
+    const blocked = left === 0 || closed || busyThatDay;
     action = (
       <Button
         small
-        title={left === 0 ? 'Full' : 'Call shotgun'}
-        disabled={left === 0}
+        title={left === 0 ? 'Full' : closed ? 'Booking closed' : busyThatDay ? 'Booked that day' : 'Call shotgun'}
+        disabled={blocked}
         loading={busy}
         onPress={() => run(() => api.claimSeat(ride.id), `Seat saved. Text ${ride.driverName.split(' ')[0] || 'the driver'} to confirm pickup.`)}
       />
@@ -163,6 +170,13 @@ export function RideCard({
           </Text>
           <Text style={{ color: t.muted, fontSize: 13 }}>· {ride.gear}</Text>
         </View>
+
+        {busyThatDay && left > 0 && !closed ? (
+          <Text style={{ color: t.muted, fontSize: 13 }}>You already have a ride that day. It's one ride per person per day.</Text>
+        ) : null}
+        {closed && !mine && !riding && left > 0 ? (
+          <Text style={{ color: t.muted, fontSize: 13 }}>Seats close 2 hours before departure.</Text>
+        ) : null}
 
         {ride.notes ? <Text style={{ color: t.ink, fontSize: 14, lineHeight: 20 }}>{ride.notes}</Text> : null}
 

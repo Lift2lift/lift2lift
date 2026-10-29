@@ -29,7 +29,30 @@ supabase/
 - **Call shotgun**: claim a seat, bail on a seat. Drivers see who's riding, can remove riders and can cancel the ride.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders who claimed a seat.
 - **Post a ride**: tap-to-pick mountain, day, time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
+- **Colorado carpool rules**: built in and enforced by the database (see below).
 - **Snow**: the biggest snow days this week, plus a 7-day grid for every Colorado ski area, sortable by drive time or total snow. Tap a mountain to see rides there.
+
+## Colorado carpool law
+
+Lift2Lift is built to qualify as a **carpooling service internet application** under [C.R.S. 43-1-127](https://colorado.public.law/statutes/crs_43-1-127). Under that law it isn't a transportation network company (Uber/Lyft), which would need PUC licensing, background checks and medical exams for drivers. These limits are enforced in the database, so no client can get around them, and the app explains them before anyone hits an error:
+
+| Rule (C.R.S. 43-1-127) | How Lift2Lift enforces it |
+| --- | --- |
+| Driver is paid no more than miles driven × the IRS business rate | Each mountain has a round-trip mileage from Boulder. `gas per rider × seats` can't exceed `round-trip miles × IRS rate` (72.5¢ in 2026). Example: Eldora is 42 mi, so the cap is $30, or $7 each with 4 seats. The post form only offers allowed amounts |
+| Each rider pays an equal share | One gas price per ride, the same for every rider |
+| No more than 6 passengers | `seats_total` is 1–6 |
+| One trip per driver per day | One ride per **person** per day, driving or riding (Mountain Time), with a lock so two requests at once can't both get through |
+| Reservations at least 2 hours ahead | Rides must leave 2+ hours after posting, and seats close 2 hours before departure |
+| Disclaimer displayed prominently | Shown on sign-up, on the post form, and on the ride board (`packages/app/lib/rules.ts`) |
+| Trips 23+ miles, or to or from a ski area | Every destination is a ski area |
+
+### Before launch
+
+- [ ] **Register with CDOT.** The law requires carpool apps to register with the Colorado Department of Transportation every year. Ask CDOT how to register.
+- [ ] **Check the mileages.** `round_trip_miles` in `supabase/migrations/…_colorado_carpool_rules.sql` (and `packages/app/lib/resorts.ts`) are conservative estimates from Boulder. Confirm them with a mapping tool.
+- [ ] **Confirm the disclaimer wording** in `packages/app/lib/rules.ts` against the official text of C.R.S. 43-1-127(1)(c).
+- [ ] **Each January**, add the new IRS rate to the `mileage_rates` table (a new migration) and to `MILEAGE_CENTS` in `rules.ts`.
+- [ ] **Talk to a lawyer** about terms of service and keeping Lift2Lift not-for-profit. CU's [Entrepreneurial Law Clinic](https://www.colorado.edu/law/academics/clinics/entrepreneurial-law-clinic) helps student startups for free.
 
 ## Run it locally
 
@@ -96,17 +119,21 @@ npm run db:push     # applies supabase/migrations to the hosted database
 | Table / function | Purpose | Who can do what |
 | --- | --- | --- |
 | `profiles` | Name for each account, created on sign-up by a trigger | Signed-in users read; you edit your own |
-| `resorts` | 26 Colorado ski areas with coordinates and drive time | Anyone reads |
-| `rides` | A posted trip | Signed-in users read (except `contact`); drivers create, edit and cancel their own |
+| `resorts` | 26 Colorado ski areas with coordinates, drive time and round-trip miles | Anyone reads |
+| `mileage_rates` | IRS business mileage rate by year | Anyone reads |
+| `gas_cap_dollars(resort, depart_at)` | The legal gas cap for a trip | Anyone |
+| `rides` | A posted trip. A trigger enforces the gas cap, 6 seats, 2-hour lead time and one ride per person per day | Signed-in users read (except `contact`); drivers create, edit and cancel their own |
 | `ride_seats` | Who has a seat on which ride | Signed-in users read; riders leave, drivers remove riders |
-| `claim_seat(ride)` | The only way to take a seat. Locks the ride row, so two people can't grab the last seat | Signed-in users |
+| `claim_seat(ride)` | The only way to take a seat. Locks the ride row, so two people can't grab the last seat. Also enforces the 2-hour booking window and one ride per person per day | Signed-in users |
 | `ride_contact(ride)` | Returns the driver's contact to the driver and seated riders only | Signed-in users |
 | `ride_board` view | Upcoming rides with driver name, seat count and rider names | Signed-in users |
 
-The security rules are tested in `supabase/tests/policies_test.sql`: sign-up, seat limits, contact privacy, and blocking edits to other people's rides. To run them against plain Postgres:
+The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. To run them against plain Postgres:
 
 ```bash
-psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/*.sql -f supabase/seed.sql -f supabase/tests/policies_test.sql
+psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/20261029000001_init.sql \
+  -f supabase/migrations/20261029000002_colorado_carpool_rules.sql -f supabase/seed.sql \
+  -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql
 ```
 
 ## Options

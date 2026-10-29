@@ -80,7 +80,7 @@ begin
 
   -- Post own ride: driver_id defaults to me.
   insert into public.rides (resort_id, depart_at, leave_from, seats_total, gas_per_rider, contact)
-  values ('breck', now() + interval '3 days', 'Williams Village', 1, 10, '720-555-0199');
+  values ('breck', now() + interval '5 days', 'Williams Village', 1, 10, '720-555-0199');
   assert (select driver_id from public.rides where resort_id = 'breck') = '33333333-3333-4333-8333-333333333333', 'driver_id defaulted';
 
   -- Rides in the past are rejected.
@@ -88,7 +88,8 @@ begin
     insert into public.rides (resort_id, depart_at, leave_from, seats_total, contact)
     values ('vail', now() - interval '1 day', 'x', 2, 'x');
     raise exception 'FAIL: posted a ride in the past';
-  exception when insufficient_privilege then null; -- RLS with-check violation
+  exception when raise_exception then
+    assert sqlerrm like 'Rides have to leave at least 2 hours%', sqlerrm;
   end;
 
   -- Bad values are rejected by checks.

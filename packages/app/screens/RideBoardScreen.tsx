@@ -5,6 +5,7 @@ import { RideCard } from '../components/RideCard';
 import { Button, Chip, ChipRow, Loading, Notice } from '../components/ui';
 import { dayLabel, driveText, isoDay, longDay, nextDays } from '../lib/dates';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
+import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
 import type { BoardRide } from '../lib/types';
 import { useForecast } from '../lib/useForecast';
@@ -51,6 +52,10 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
       (day === 'all' || isoDay(new Date(r.departAt)) === day) &&
       (!openOnly || r.seatsTaken < r.seatsTotal || r.driverId === me || (!!me && r.riderIds.includes(me))),
   );
+  const busyDays = useMemo(
+    () => new Set((rides ?? []).filter((r) => r.driverId === me || (!!me && r.riderIds.includes(me))).map((r) => r.rideDate)),
+    [rides, me],
+  );
   const resortsWithRides = RESORTS.filter((r) => (rides ?? []).some((x) => x.resortId === r.id));
   const openSeats = shown.reduce((n, r) => n + Math.max(0, r.seatsTotal - r.seatsTaken), 0);
 
@@ -94,6 +99,11 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
             ))}
           </ChipRow>
 
+          <Text style={{ color: t.muted, fontSize: 12, lineHeight: 17 }}>
+            Carpool apps aren't regulated by the state of Colorado. Drivers might not be background-checked, and vehicles and insurance
+            aren't state-verified. Full notice at the bottom.
+          </Text>
+
           {message ? <Notice kind={message.kind}>{message.text}</Notice> : null}
 
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
@@ -128,11 +138,20 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
               {shown.map((r) => (
                 <View key={r.id} style={{ flexGrow: 1, flexBasis: 420, maxWidth: '100%' }}>
-                  <RideCard ride={r} forecast={forecast} onChanged={load} onMessage={(text, kind = 'success') => setMessage({ text, kind })} />
+                  <RideCard ride={r} forecast={forecast} busyDays={busyDays} onChanged={load} onMessage={(text, kind = 'success') => setMessage({ text, kind })} />
                 </View>
               ))}
             </View>
           )}
+
+          <View style={{ borderTopWidth: 1, borderTopColor: t.line, paddingTop: 14, marginTop: 6, gap: 6 }}>
+            <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>COLORADO CARPOOL NOTICE</Text>
+            <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>{CARPOOL_DISCLAIMER}</Text>
+            <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
+              Lift2Lift follows Colorado's carpool app rules: gas money is capped at the driver's real cost, up to 6 riders per car, one
+              ride per person per day, and seats are booked at least 2 hours ahead.
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </View>

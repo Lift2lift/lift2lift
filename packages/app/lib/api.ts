@@ -17,10 +17,12 @@ type BoardRow = {
   seats_taken: number;
   rider_ids: string[];
   rider_names: string[];
+  ride_date: string;
+  gas_cap: number;
 };
 
 const BOARD_COLUMNS =
-  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names';
+  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap';
 
 function toSession(s: SupabaseSession | null): Session | null {
   if (!s) return null;
@@ -46,6 +48,8 @@ function toRide(r: BoardRow): BoardRide {
     seatsTaken: r.seats_taken,
     riderIds: r.rider_ids ?? [],
     riderNames: r.rider_names ?? [],
+    rideDate: r.ride_date,
+    gasCap: r.gas_cap,
   };
 }
 

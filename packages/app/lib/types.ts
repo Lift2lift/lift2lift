@@ -9,6 +9,7 @@ export type Resort = {
   name: string;
   region: string;
   driveMinutes: number;
+  roundTripMiles: number;
   lat: number;
   lon: number;
 };
@@ -28,6 +29,8 @@ export type BoardRide = {
   seatsTaken: number;
   riderIds: string[];
   riderNames: string[];
+  rideDate: string; // YYYY-MM-DD, Mountain Time
+  gasCap: number; // legal max for the whole trip, dollars
 };
 
 export type NewRide = {

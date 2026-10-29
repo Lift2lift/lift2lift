@@ -3,6 +3,7 @@ import { Platform, Text, TextInput, View } from 'react-native';
 import { Brand, Button, Field, FormScreen, Heading, Notice, TextLink } from '../components/ui';
 import { MIN_PASSWORD_LENGTH, REQUIRE_EDU_EMAIL } from '../lib/config';
 import { isValidEmail } from '../lib/errors';
+import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
 import { useApi, useNav } from '../providers';
 
@@ -179,6 +180,7 @@ export function SignUpScreen() {
         returnKeyType="go"
         onSubmitEditing={submit}
       />
+      <Notice kind="info">{CARPOOL_DISCLAIMER}</Notice>
       <Button title="Create account" onPress={submit} loading={loading} />
       <GoogleButton onError={setError} />
       <Footer>

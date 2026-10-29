@@ -35,11 +35,11 @@ begin
     );
   end loop;
 
-  -- Sample rides, dated relative to today so they always show as upcoming.
+  -- Sample rides, dated relative to today (Mountain Time) so they always show as upcoming.
   insert into public.rides (driver_id, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, contact) values
-    (v_driver, 'abasin',  date_trunc('day', now()) + interval '2 days 6 hours 30 minutes', 'CU Boulder – Kittredge lot', 3, 15, 'Skis and boards fit', 'Sample ride. AWD with snow tires, back by 4.', '(303) 555-0142'),
-    (v_driver, 'copper',  date_trunc('day', now()) + interval '3 days 7 hours',            'Boulder – Table Mesa Park-n-Ride', 2, 20, 'Roof box / rack', 'Sample ride. Leaving early to beat I-70.', '@demo.driver'),
-    (v_driver, 'eldora',  date_trunc('day', now()) + interval '1 day 15 hours',            'Boulder – The Hill (13th & College)', 4, 5, 'Boards only', 'Sample ride. Night skiing, quick lap after class.', '(303) 555-0142');
+    (v_driver, 'abasin',  (date_trunc('day', now() at time zone 'America/Denver') + interval '2 days 6 hours 30 minutes') at time zone 'America/Denver', 'CU Boulder – Kittredge lot', 3, 15, 'Skis and boards fit', 'Sample ride. AWD with snow tires, back by 4.', '(303) 555-0142'),
+    (v_driver, 'copper',  (date_trunc('day', now() at time zone 'America/Denver') + interval '3 days 7 hours') at time zone 'America/Denver',            'Boulder – Table Mesa Park-n-Ride', 2, 20, 'Roof box / rack', 'Sample ride. Leaving early to beat I-70.', '@demo.driver'),
+    (v_driver, 'eldora',  (date_trunc('day', now() at time zone 'America/Denver') + interval '1 day 15 hours') at time zone 'America/Denver',            'Boulder – The Hill (13th & College)', 4, 5, 'Boards only', 'Sample ride. Night skiing, quick lap after class.', '(303) 555-0142');
 
   -- The demo rider already has a seat on the first ride.
   insert into public.ride_seats (ride_id, rider_id)
