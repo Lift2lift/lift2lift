@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, Session } from './types';
+import type { Api, BoardRide, DriverVerification, Session } from './types';
 
 type BoardRow = {
   id: string;
@@ -19,10 +19,22 @@ type BoardRow = {
   rider_names: string[];
   ride_date: string;
   gas_cap: number;
+  driver_verified: boolean;
 };
 
+type VerificationRow = {
+  status: DriverVerification['status'];
+  has_license: boolean;
+  has_insurance: boolean;
+  license_path: string | null;
+  insurance_path: string | null;
+  review_note: string | null;
+};
+
+const DOCS_BUCKET = 'driver-docs';
+
 const BOARD_COLUMNS =
-  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap';
+  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified';
 
 function toSession(s: SupabaseSession | null): Session | null {
   if (!s) return null;
@@ -50,6 +62,7 @@ function toRide(r: BoardRow): BoardRide {
     riderNames: r.rider_names ?? [],
     rideDate: r.ride_date,
     gasCap: r.gas_cap,
+    driverVerified: !!r.driver_verified,
   };
 }
 
@@ -69,7 +82,7 @@ export function createApi(supabase: SupabaseClient): Api {
     if (!holdEvents) emit(toSession(session));
   });
 
-  return {
+  const api: Api = {
     async getSession() {
       const { data } = await supabase.auth.getSession();
       return toSession(data.session);
@@ -159,6 +172,43 @@ export function createApi(supabase: SupabaseClient): Api {
       return (data as string | null) ?? null;
     },
 
+    async getDriverVerification(options) {
+      const { data } = check(await supabase.rpc('driver_verification_status'));
+      const v = data as VerificationRow;
+      const signed = async (path: string | null) => {
+        if (!path || !options?.withPhotos) return null;
+        const res = await supabase.storage.from(DOCS_BUCKET).createSignedUrl(path, 600);
+        return res.data?.signedUrl ?? null;
+      };
+      return {
+        status: v.status,
+        hasLicense: v.has_license,
+        hasInsurance: v.has_insurance,
+        licenseUrl: await signed(v.license_path),
+        insuranceUrl: await signed(v.insurance_path),
+        reviewNote: v.review_note,
+      };
+    },
+    async uploadDriverDoc(doc, photo) {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (!uid) throw new Error('Sign in first.');
+      const bucket = supabase.storage.from(DOCS_BUCKET);
+      // Replacing a photo with a different file type: remove the old one.
+      const existing = await bucket.list(uid);
+      const stale = (existing.data ?? []).filter((f) => f.name.startsWith(`${doc}.`) && f.name !== `${doc}.${photo.ext}`).map((f) => `${uid}/${f.name}`);
+      if (stale.length) await bucket.remove(stale);
+      const up = await bucket.upload(`${uid}/${doc}.${photo.ext}`, photo.body, { contentType: photo.contentType, upsert: true });
+      if (up.error) {
+        const m = up.error.message.toLowerCase();
+        if (m.includes('size') || m.includes('too large')) throw new Error('That photo is too big. Try again with a smaller one (under 10 MB).');
+        if (m.includes('mime') || m.includes('type')) throw new Error('Use a JPG, PNG or HEIC photo.');
+        throw new Error(friendlyError(up.error));
+      }
+      return api.getDriverVerification({ withPhotos: true });
+    },
+
     getForecast: fetchForecast,
   };
+  return api;
 }

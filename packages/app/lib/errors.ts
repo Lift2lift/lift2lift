@@ -3,6 +3,8 @@ export function friendlyError(error: unknown): string {
   const message = (error as { message?: string } | null)?.message ?? String(error ?? '');
   const m = message.toLowerCase();
 
+  if (m.includes('lift2lift is for cu boulder') || m.includes('database error saving new user'))
+    return 'Lift2Lift is for CU Boulder students. Use your @colorado.edu email.';
   if (m.includes('invalid login credentials')) return "That email and password don't match. Check for typos or reset your password.";
   if (m.includes('email not confirmed')) return 'Confirm your email first. Enter the code we sent you.';
   if (m.includes('user already registered')) return 'An account with that email already exists. Sign in instead.';

@@ -1,7 +1,7 @@
 -- Local development only: two demo accounts and a few sample rides.
 -- `supabase db reset` runs this after the migrations. Never run it in production.
 --
---   driver@lift2lift.test / password123   (posts rides)
+--   driver@lift2lift.test / password123   (posts rides; driver verification approved)
 --   rider@lift2lift.test  / password123   (claims seats)
 
 do $$
@@ -10,6 +10,9 @@ declare
   v_rider  uuid := '22222222-2222-4222-8222-222222222222';
   v_user   record;
 begin
+  -- Local-only test domain so the demo accounts pass the CU email rule.
+  insert into public.allowed_email_domains (domain) values ('lift2lift.test') on conflict do nothing;
+
   for v_user in
     select * from (values
       (v_driver, 'driver@lift2lift.test', 'Demo Driver'),
@@ -34,6 +37,10 @@ begin
       'email', now(), now(), now()
     );
   end loop;
+
+  -- The demo driver's license and insurance were "reviewed" so they can host.
+  insert into public.driver_verifications (user_id, status, submitted_at, reviewed_at)
+  values (v_driver, 'approved', now(), now());
 
   -- Sample rides, dated relative to today (Mountain Time) so they always show as upcoming.
   insert into public.rides (driver_id, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, contact) values

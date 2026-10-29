@@ -218,6 +218,9 @@ export function RideCard({
             <Text style={{ color: t.muted, fontSize: 13 }}>
               {mine ? "You're driving" : `Driver: ${ride.driverName || 'A student'}`}
             </Text>
+            {ride.driverVerified ? (
+              <Text style={{ color: t.ok, fontSize: 12, fontWeight: '700' }}>✓ License & insurance on file</Text>
+            ) : null}
             {(mine || riding) &&
               (contact ? (
                 <Text selectable style={{ color: t.ink, fontSize: 14, fontWeight: '700', fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) }}>

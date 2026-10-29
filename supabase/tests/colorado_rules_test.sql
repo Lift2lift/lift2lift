@@ -5,6 +5,9 @@
 insert into auth.users (id, email, raw_user_meta_data) values
   ('44444444-4444-4444-8444-444444444444', 'a@lift2lift.test', '{"full_name":"Alex"}'),
   ('55555555-5555-4555-8555-555555555555', 'b@lift2lift.test', '{"full_name":"Blair"}');
+insert into public.driver_verifications (user_id, status) values
+  ('44444444-4444-4444-8444-444444444444', 'submitted'),
+  ('55555555-5555-4555-8555-555555555555', 'submitted');
 
 do $$ begin
   assert public.gas_cap_dollars('eldora', '2026-12-05 08:00-07') = 30, 'Eldora: 42 mi × 72.5¢ = $30';

@@ -108,6 +108,24 @@ export function AppHeader() {
             <Pressable
               onPress={() => {
                 setMenuOpen(false);
+                nav.push('/account');
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: t.ink, fontWeight: '700' }}>Account settings</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setMenuOpen(false);
+                nav.push('/account/driver');
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: t.ink, fontWeight: '700' }}>Driver verification</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setMenuOpen(false);
                 api.signOut();
               }}
               accessibilityRole="button"

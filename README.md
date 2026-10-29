@@ -24,11 +24,14 @@ supabase/
 
 ## What it does
 
+- **CU Boulder only**: every account needs a @colorado.edu email (department subdomains like @cs.colorado.edu work too), confirmed with a 6-digit code sent to that inbox. The database rejects any other address, including on email changes.
 - **Accounts**: sign up with name, email and password, confirmed by a 6-digit emailed code. Sign in, sign out, forgot password (code + new password). Sessions persist on web and iPhone.
 - **Ride board**: upcoming rides filtered by day, mountain and open seats. Each ride card shows departure time, pickup spot, gas money, gear space, a seat map and that day's forecast for the mountain.
 - **Call shotgun**: claim a seat, bail on a seat. Drivers see who's riding, can remove riders and can cancel the ride.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders who claimed a seat.
 - **Post a ride**: tap-to-pick mountain, day, time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
+- **Driver verification**: the first time someone taps **Post a ride**, a pop-up sends them to **Account → Driver verification** to snap a photo of their driver's license and insurance card. Once both are uploaded they can host right away, and riders see **“License & insurance on file”** on their rides. Photos are private: only the driver and the team can see them.
+- **Account settings**: name, CU email status, driver verification, sign out.
 - **Colorado carpool rules**: built in and enforced by the database (see below).
 - **Snow**: the biggest snow days this week, plus a 7-day grid for every Colorado ski area, sortable by drive time or total snow. Tap a mountain to see rides there.
 
@@ -53,6 +56,14 @@ Lift2Lift is built to qualify as a **carpooling service internet application** u
 - [ ] **Confirm the disclaimer wording** in `packages/app/lib/rules.ts` against the official text of C.R.S. 43-1-127(1)(c).
 - [ ] **Each January**, add the new IRS rate to the `mileage_rates` table (a new migration) and to `MILEAGE_CENTS` in `rules.ts`.
 - [ ] **Talk to a lawyer** about terms of service and keeping Lift2Lift not-for-profit. CU's [Entrepreneurial Law Clinic](https://www.colorado.edu/law/academics/clinics/entrepreneurial-law-clinic) helps student startups for free.
+
+## Reviewing driver photos
+
+Uploading both photos lets a driver host immediately ("submitted"). To spot-check:
+
+1. **Supabase dashboard → Storage → driver-docs**: each driver has a folder named by user id, holding `license.*` and `insurance.*`.
+2. **Table editor → driver_verifications**: set `status` to `approved`, or to `rejected` with a `review_note` (for example "Insurance card is expired."). Set `reviewed_at` to now.
+3. A rejected driver loses the badge and can't post new rides. They see your note in Driver verification, and uploading a new photo resubmits.
 
 ## Run it locally
 
@@ -79,11 +90,11 @@ npm run web      # http://localhost:3000
 npm run ios      # opens the iOS Simulator
 ```
 
-Sign in with a demo account, or create your own:
+Sign in with a demo account, or create your own with any @colorado.edu address (locally, the code lands in the local inbox, so the address doesn't need to be real). The demo accounts use `@lift2lift.test`, which only the local seed allows:
 
 | Email | Password | Has |
 | --- | --- | --- |
-| driver@lift2lift.test | password123 | 3 sample rides posted |
+| driver@lift2lift.test | password123 | 3 sample rides posted, driver verification approved |
 | rider@lift2lift.test | password123 | a seat on the A-Basin ride |
 
 When you sign up locally, the confirmation code goes to the local inbox at **http://127.0.0.1:54324**, not your real email. Supabase Studio, a database browser, runs at **http://127.0.0.1:54323**.
@@ -126,18 +137,23 @@ npm run db:push     # applies supabase/migrations to the hosted database
 | `ride_seats` | Who has a seat on which ride | Signed-in users read; riders leave, drivers remove riders |
 | `claim_seat(ride)` | The only way to take a seat. Locks the ride row, so two people can't grab the last seat. Also enforces the 2-hour booking window and one ride per person per day | Signed-in users |
 | `ride_contact(ride)` | Returns the driver's contact to the driver and seated riders only | Signed-in users |
-| `ride_board` view | Upcoming rides with driver name, seat count and rider names | Signed-in users |
+| `ride_board` view | Upcoming rides with driver name, seat count, rider names, gas cap and the driver's verified badge | Signed-in users |
+| `allowed_email_domains` | Email domains that can sign up (`colorado.edu`). A trigger on `auth.users` rejects everything else | Anyone reads |
+| `driver_verifications` | License + insurance status per driver: incomplete, submitted, approved, rejected | Drivers read their own; only the team writes |
+| `driver-docs` storage bucket | Private license and insurance photos at `<user id>/license.*` and `insurance.*` | Each driver uploads and sees only their own |
+| `driver_verification_status()` | Checks what's uploaded, updates and returns the status | Signed-in users |
 
-The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. To run them against plain Postgres:
+The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), photo privacy, hosting before and after upload, rejection and resubmission. To run them against plain Postgres:
 
 ```bash
 psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/20261029000001_init.sql \
-  -f supabase/migrations/20261029000002_colorado_carpool_rules.sql -f supabase/seed.sql \
-  -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql
+  -f supabase/migrations/20261029000002_colorado_carpool_rules.sql \
+  -f supabase/migrations/20261029000003_cu_email_and_driver_verification.sql -f supabase/seed.sql \
+  -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql
 ```
 
 ## Options
 
-- **College emails only**: set `REQUIRE_EDU_EMAIL = true` in `packages/app/lib/config.ts`. To enforce it on the server too, add a **Before User Created** auth hook that rejects non-`.edu` addresses.
+- **More schools**: add the domain to `allowed_email_domains` (a new migration) and to `SCHOOL_EMAIL_DOMAINS` in `packages/app/lib/config.ts`.
 - **Pickup spots, gear options**: `packages/app/lib/config.ts`.
 - **Mountains**: `packages/app/lib/resorts.ts`, and the `resorts` insert in the migration (keep both in sync).

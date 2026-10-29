@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Platform, Text, TextInput, View } from 'react-native';
 import { Brand, Button, Field, FormScreen, Heading, Notice, TextLink } from '../components/ui';
-import { MIN_PASSWORD_LENGTH, REQUIRE_EDU_EMAIL } from '../lib/config';
+import { isSchoolEmail, MIN_PASSWORD_LENGTH, SCHOOL_EMAIL_ERROR } from '../lib/config';
 import { isValidEmail } from '../lib/errors';
 import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
@@ -66,6 +66,7 @@ export function SignInScreen() {
     setError(null);
     const clean = email.trim().toLowerCase();
     if (!isValidEmail(clean)) return setError('Enter a valid email address.');
+    if (!isSchoolEmail(clean)) return setError(SCHOOL_EMAIL_ERROR);
     if (!password) return setError('Enter your password.');
     setLoading(true);
     try {
@@ -86,7 +87,7 @@ export function SignInScreen() {
       <Brand tagline={TAGLINE} />
       <Heading title="Sign in" subtitle="Find a ride or fill your empty seats." />
       {error ? <Notice kind="error">{error}</Notice> : null}
-      <Field label="Email" value={email} onChangeText={setEmail} returnKeyType="next" onSubmitEditing={() => passwordRef.current?.focus()} {...emailProps} />
+      <Field label="CU Boulder email" value={email} onChangeText={setEmail} returnKeyType="next" onSubmitEditing={() => passwordRef.current?.focus()} {...emailProps} />
       <Field
         ref={passwordRef}
         label="Password"
@@ -130,7 +131,7 @@ export function SignUpScreen() {
     const clean = email.trim().toLowerCase();
     if (!cleanName) return setError('Add your name so drivers and riders know who you are.');
     if (!isValidEmail(clean)) return setError('Enter a valid email address.');
-    if (REQUIRE_EDU_EMAIL && !clean.endsWith('.edu')) return setError('Use your college email (ending in .edu).');
+    if (!isSchoolEmail(clean)) return setError(SCHOOL_EMAIL_ERROR);
     if (password.length < MIN_PASSWORD_LENGTH) return setError(`Use at least ${MIN_PASSWORD_LENGTH} characters for your password.`);
     setLoading(true);
     try {
@@ -146,7 +147,7 @@ export function SignUpScreen() {
   return (
     <FormScreen>
       <Brand tagline={TAGLINE} />
-      <Heading title="Create your account" subtitle="Takes 30 seconds. We'll email you a code to confirm it's you." />
+      <Heading title="Create your account" subtitle="For CU Boulder students. Takes 30 seconds." />
       {error ? <Notice kind="error">{error}</Notice> : null}
       <Field
         label="Name"
@@ -160,7 +161,8 @@ export function SignUpScreen() {
       />
       <Field
         ref={emailRef}
-        label={REQUIRE_EDU_EMAIL ? 'College email' : 'Email'}
+        label="CU Boulder email"
+        hint="Lift2Lift is just for CU Boulder students. We'll email you a code to confirm it's yours."
         value={email}
         onChangeText={setEmail}
         returnKeyType="next"
@@ -296,7 +298,7 @@ export function ForgotPasswordScreen({ initialEmail = '' }: { initialEmail?: str
   async function sendCode() {
     setError(null);
     const clean = email.trim().toLowerCase();
-    if (!isValidEmail(clean)) return setError('Enter the email you signed up with.');
+    if (!isValidEmail(clean) || !isSchoolEmail(clean)) return setError('Enter the @colorado.edu email you signed up with.');
     setLoading(true);
     try {
       await api.sendPasswordReset(clean);
@@ -328,7 +330,7 @@ export function ForgotPasswordScreen({ initialEmail = '' }: { initialEmail?: str
         <Brand tagline={TAGLINE} />
         <Heading title="Reset your password" subtitle="Enter your email and we'll send you a code." />
         {error ? <Notice kind="error">{error}</Notice> : null}
-        <Field label="Email" value={email} onChangeText={setEmail} returnKeyType="go" onSubmitEditing={sendCode} {...emailProps} />
+        <Field label="CU Boulder email" value={email} onChangeText={setEmail} returnKeyType="go" onSubmitEditing={sendCode} {...emailProps} />
         <Button title="Send code" onPress={sendCode} loading={loading} />
         <Footer>
           <TextLink onPress={() => nav.replace('/sign-in')}>Back to sign in</TextLink>

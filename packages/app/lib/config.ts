@@ -1,8 +1,17 @@
 /**
- * Only allow sign-ups with a college (.edu) email. This check runs in the app;
- * to enforce it on the server, add a "Before User Created" auth hook (README).
+ * Lift2Lift is for CU Boulder students: every account uses a @colorado.edu
+ * email (subdomains like @cs.colorado.edu count). The database enforces this
+ * too (allowed_email_domains table); keep the two lists in sync.
  */
-export const REQUIRE_EDU_EMAIL = false;
+export const SCHOOL_NAME = 'CU Boulder';
+export const SCHOOL_EMAIL_DOMAINS = ['colorado.edu'];
+
+export function isSchoolEmail(email: string) {
+  const domain = email.trim().toLowerCase().split('@')[1] ?? '';
+  return SCHOOL_EMAIL_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
+export const SCHOOL_EMAIL_ERROR = `Lift2Lift is for ${SCHOOL_NAME} students. Use your @colorado.edu email.`;
 
 export const MIN_PASSWORD_LENGTH = 8;
 

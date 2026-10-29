@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Api, Session } from '../lib/types';
+import type { Api, PhotoPicker, Session } from '../lib/types';
 
 /* ---------- Backend ---------- */
 
@@ -39,7 +39,16 @@ export function useAuth() {
  * never import a platform-specific navigation library.
  */
 
-export type Route = '/' | '/snow' | '/post' | '/sign-in' | '/sign-up' | '/verify' | '/forgot-password';
+export type Route =
+  | '/'
+  | '/snow'
+  | '/post'
+  | '/account'
+  | '/account/driver'
+  | '/sign-in'
+  | '/sign-up'
+  | '/verify'
+  | '/forgot-password';
 export type Nav = {
   push: (route: Route, params?: Record<string, string>) => void;
   replace: (route: Route, params?: Record<string, string>) => void;
@@ -66,15 +75,27 @@ export function withQuery(route: Route, params?: Record<string, string>) {
   return q ? `${route}?${q}` : route;
 }
 
+/* ---------- Photos ---------- */
+
+const PhotoContext = createContext<PhotoPicker | null>(null);
+
+export function usePhotoPicker() {
+  const p = useContext(PhotoContext);
+  if (!p) throw new Error('usePhotoPicker must be used inside <AppProviders>');
+  return p;
+}
+
 /* ---------- All together ---------- */
 
-export function AppProviders({ api, nav, children }: { api: Api; nav: Nav; children: ReactNode }) {
+export function AppProviders({ api, nav, photos, children }: { api: Api; nav: Nav; photos: PhotoPicker; children: ReactNode }) {
   const navValue = useMemo(() => nav, [nav]);
   return (
     <ApiContext.Provider value={api}>
-      <AuthProvider api={api}>
-        <NavContext.Provider value={navValue}>{children}</NavContext.Provider>
-      </AuthProvider>
+      <PhotoContext.Provider value={photos}>
+        <AuthProvider api={api}>
+          <NavContext.Provider value={navValue}>{children}</NavContext.Provider>
+        </AuthProvider>
+      </PhotoContext.Provider>
     </ApiContext.Provider>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Modal, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Button, Chip, ChipRow, Field, FormScreen, Heading, Label, Notice } from '../components/ui';
 import { GEAR_OPTIONS, PICKUP_SPOTS } from '../lib/config';
@@ -9,6 +9,7 @@ import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER, earliestDeparture, gasCapDollars, MAX_PASSENGERS, maxGasPerRider, mileageCents } from '../lib/rules';
 import { useTheme } from '../lib/theme';
 import { useForecast } from '../lib/useForecast';
+import { canHost, type DriverVerification } from '../lib/types';
 import { useApi, useAuth, useNav } from '../providers';
 
 const TIMES = ['05:00', '05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00', '12:00', '15:00', '16:00'];
@@ -36,6 +37,18 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
   const [allMountains, setAllMountains] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // First time hosting? Drivers need license + insurance photos on file.
+  const [verification, setVerification] = useState<DriverVerification | null>(null);
+  const [verificationChecked, setVerificationChecked] = useState(false);
+  useEffect(() => {
+    api
+      .getDriverVerification()
+      .then(setVerification)
+      .catch(() => {})
+      .finally(() => setVerificationChecked(true));
+  }, [api]);
+  const needsVerification = verificationChecked && !canHost(verification);
 
   // Days this person already drives or rides (one ride per person per day).
   const [busyDays, setBusyDays] = useState<Set<string>>(new Set());
@@ -99,6 +112,27 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
 
   return (
     <FormScreen header={<AppHeader />}>
+      <Modal visible={needsVerification} transparent animationType="fade" onRequestClose={() => nav.back()}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(7,13,24,0.6)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <View
+            accessibilityViewIsModal
+            style={{ width: '100%', maxWidth: 420, backgroundColor: t.surface, borderRadius: 18, padding: 22, gap: 14 }}
+          >
+            <Text style={{ color: t.ink, fontSize: 24, fontWeight: '900' }}>Before your first ride</Text>
+            <Text style={{ color: t.muted, fontSize: 15, lineHeight: 22 }}>
+              Lift2Lift drivers add a photo of their driver's license and insurance card. It takes about a minute, and you only do it once.
+            </Text>
+            <View style={{ gap: 6 }}>
+              <Text style={{ color: t.ink, fontSize: 15 }}>1. Snap your license</Text>
+              <Text style={{ color: t.ink, fontSize: 15 }}>2. Snap your insurance card</Text>
+              <Text style={{ color: t.ink, fontSize: 15 }}>3. Post your ride</Text>
+            </View>
+            <Button title="Add my photos" onPress={() => nav.replace('/account/driver', { then: 'post' })} />
+            <Button title="Not now" variant="ghost" onPress={() => nav.back()} />
+          </View>
+        </View>
+      </Modal>
+
       <Heading title="Post a ride" subtitle="Riders see this on the board. Only people who claim a seat see how to reach you." />
 
       <View style={{ gap: 8 }}>
@@ -200,7 +234,7 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
 
       <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
         <Button variant="ghost" title="Cancel" onPress={() => nav.back()} />
-        <Button title="Post ride" onPress={submit} loading={saving} disabled={busy} />
+        <Button title="Post ride" onPress={submit} loading={saving} disabled={busy || needsVerification} />
       </View>
     </FormScreen>
   );

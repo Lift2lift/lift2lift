@@ -1,0 +1,44 @@
+import type { PhotoPicker } from '@lift2lift/app';
+import { decode } from 'base64-arraybuffer';
+import * as ImagePicker from 'expo-image-picker';
+import { ActionSheetIOS, Alert, Platform } from 'react-native';
+
+function chooseSource(): Promise<'camera' | 'library' | null> {
+  return new Promise((resolve) => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Take photo', 'Choose from library', 'Cancel'], cancelButtonIndex: 2 },
+        (i) => resolve(i === 0 ? 'camera' : i === 1 ? 'library' : null),
+      );
+    } else {
+      Alert.alert('Add photo', undefined, [
+        { text: 'Take photo', onPress: () => resolve('camera') },
+        { text: 'Choose from library', onPress: () => resolve('library') },
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+      ]);
+    }
+  });
+}
+
+/** Camera or photo library, compressed to JPEG, read as bytes for Supabase Storage. */
+export const nativePhotoPicker: PhotoPicker = {
+  async pick() {
+    const source = await chooseSource();
+    if (!source) return null;
+    if (source === 'camera') {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) throw new Error('Allow camera access for Lift2Lift in Settings to take a photo.');
+    }
+    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6, base64: true, exif: false };
+    const result = source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+    const asset = result.canceled ? null : result.assets?.[0];
+    if (!asset?.base64) return null;
+    const contentType = asset.mimeType ?? 'image/jpeg';
+    return {
+      body: decode(asset.base64),
+      contentType,
+      ext: contentType.includes('png') ? 'png' : contentType.includes('hei') ? 'heic' : 'jpg',
+      previewUri: asset.uri,
+    };
+  },
+};

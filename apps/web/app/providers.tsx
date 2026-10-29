@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getApi } from '../lib/api';
+import { webPhotoPicker } from '../lib/photos';
 
 /** Sends signed-out people to sign-in, and signed-in people away from it. */
 function AuthGate({ children }: { children: ReactNode }) {
@@ -62,7 +63,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <SafeAreaProvider>
-      <AppProviders api={getApi()} nav={nav}>
+      <AppProviders api={getApi()} nav={nav} photos={webPhotoPicker}>
         <View style={{ flex: 1, minHeight: '100%' as unknown as number }}>
           <AuthGate>{children}</AuthGate>
         </View>

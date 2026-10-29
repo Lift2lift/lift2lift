@@ -31,7 +31,39 @@ export type BoardRide = {
   riderNames: string[];
   rideDate: string; // YYYY-MM-DD, Mountain Time
   gasCap: number; // legal max for the whole trip, dollars
+  driverVerified: boolean; // license + insurance photos on file
 };
+
+export type DriverDoc = 'license' | 'insurance';
+
+/** Where a driver is in license + insurance verification. */
+export type DriverVerification = {
+  /** incomplete: photos missing · submitted: can host · approved: checked by the team · rejected: needs a new photo */
+  status: 'incomplete' | 'submitted' | 'approved' | 'rejected';
+  hasLicense: boolean;
+  hasInsurance: boolean;
+  /** Short-lived links to the person's own photos, for thumbnails. */
+  licenseUrl: string | null;
+  insuranceUrl: string | null;
+  reviewNote: string | null;
+};
+
+export function canHost(v: DriverVerification | null) {
+  return !!v && (v.status === 'submitted' || v.status === 'approved');
+}
+
+/** A photo picked on the device, ready to upload. */
+export type PickedPhoto = {
+  body: Blob | ArrayBuffer;
+  contentType: string;
+  ext: 'jpg' | 'png' | 'heic' | 'webp';
+  previewUri: string;
+};
+
+/** Each app supplies its own photo picker (file input on web, camera/library on iOS). */
+export interface PhotoPicker {
+  pick(): Promise<PickedPhoto | null>;
+}
 
 export type NewRide = {
   resortId: string;
@@ -79,6 +111,9 @@ export interface Api {
   leaveSeat(rideId: string): Promise<void>;
   removeRider(rideId: string, riderId: string): Promise<void>;
   rideContact(rideId: string): Promise<string | null>;
+
+  getDriverVerification(options?: { withPhotos?: boolean }): Promise<DriverVerification>;
+  uploadDriverDoc(doc: DriverDoc, photo: PickedPhoto): Promise<DriverVerification>;
 
   getForecast(): Promise<Forecast>;
 }

@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { api, isConfigured } from '../lib/api';
+import { nativePhotoPicker } from '../lib/photos';
 
 function RootStack() {
   const { session, loading } = useAuth();
@@ -17,6 +18,8 @@ function RootStack() {
         <Stack.Screen name="index" />
         <Stack.Screen name="snow" />
         <Stack.Screen name="post" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="account/index" />
+        <Stack.Screen name="account/driver" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
@@ -53,7 +56,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AppProviders api={api} nav={nav}>
+      <AppProviders api={api} nav={nav} photos={nativePhotoPicker}>
         <StatusBar style="light" />
         <RootStack />
       </AppProviders>

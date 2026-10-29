@@ -10,6 +10,15 @@
       "bundleIdentifier": "com.zatzworks.lift2lift",
       "supportsTablet": false
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lift2Lift uses your photos so you can upload your driver's license and insurance card.",
+          "cameraPermission": "Lift2Lift uses the camera so you can snap your driver's license and insurance card."
+        }
+      ]
+    ]
   }
 }
