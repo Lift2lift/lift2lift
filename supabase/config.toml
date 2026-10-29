@@ -1,5 +1,5 @@
 # Local Supabase for Lift2Lift. `npm run db:start` reads this file.
-# Hosted project: lift2lift (ref aqoqfsesceiykkoahnej). Link with `npm run db:link`.
+# Hosted project: lift2lift (ref vpkxesucfaofwazqgpni). Link with `npm run db:link`.
 project_id = "lift2lift"
 
 [api]
@@ -49,3 +49,12 @@ content_path = "./supabase/templates/confirmation.html"
 [auth.email.template.recovery]
 subject = "Reset your Lift2Lift password"
 content_path = "./supabase/templates/recovery.html"
+
+# Hosted project overrides, applied by `supabase config push`.
+# Without these the hosted Site URL stays at localhost and email links land there.
+[remotes.production]
+project_id = "vpkxesucfaofwazqgpni"
+
+[remotes.production.auth]
+site_url = "https://lift2lift.vercel.app"
+additional_redirect_urls = ["https://lift2lift.vercel.app", "lift2lift://"]

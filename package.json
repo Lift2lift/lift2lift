@@ -12,7 +12,7 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:status": "supabase status",
-    "db:link": "supabase link --project-ref aqoqfsesceiykkoahnej",
+    "db:link": "supabase link --project-ref vpkxesucfaofwazqgpni",
     "db:push": "supabase db push",
     "web": "npm run dev -w @lift2lift/web",
     "web:build": "npm run build -w @lift2lift/web",

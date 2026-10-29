@@ -1,0 +1,12 @@
+node_modules/
+.next/
+next-env.d.ts
+.expo/
+.vercel/
+.DS_Store
+.env
+.env*.local
+supabase/.temp/
+supabase/.branches/
+.vercel
+.env*

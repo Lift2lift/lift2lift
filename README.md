@@ -77,7 +77,7 @@ Install **Expo Go**, run `npm run mobile` and scan the QR code. Your phone can't
 
 ```bash
 npx supabase login
-npm run db:link     # links to project ref aqoqfsesceiykkoahnej
+npm run db:link     # links to project ref vpkxesucfaofwazqgpni
 npm run db:push     # applies supabase/migrations to the hosted database
 ```
 
@@ -85,7 +85,7 @@ npm run db:push     # applies supabase/migrations to the hosted database
 
 1. **Authentication → Email Templates**: paste `supabase/templates/confirmation.html` into **Confirm signup** and `recovery.html` into **Reset Password**. The app asks for the code (`{{ .Token }}`), not a link.
 2. **Authentication → Emails → SMTP**: add a real email provider (Resend, Postmark). The built-in sender only allows a few emails an hour.
-3. **Project Settings → API Keys**: copy the anon / publishable key into each app's env, with URL `https://aqoqfsesceiykkoahnej.supabase.co`.
+3. **Project Settings → API Keys**: copy the anon / publishable key into each app's env, with URL `https://vpkxesucfaofwazqgpni.supabase.co`.
 
 **Website**: deploy `apps/web` to Vercel (root directory `apps/web`) and add the two `NEXT_PUBLIC_` env vars.
 
