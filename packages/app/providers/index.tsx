@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Api, PhotoPicker, Session } from '../lib/types';
+import type { Api, DeviceServices, Session } from '../lib/types';
 
 /* ---------- Backend ---------- */
 
@@ -45,6 +45,7 @@ export type Route =
   | '/post'
   | '/account'
   | '/account/driver'
+  | '/verified'
   | '/sign-in'
   | '/sign-up'
   | '/verify'
@@ -57,6 +58,8 @@ export type Nav = {
 };
 
 export const AUTH_ROUTES: Route[] = ['/sign-in', '/sign-up', '/verify', '/forgot-password'];
+/** Open to everyone, signed in or not (Stripe's "you're done" page for iOS). */
+export const PUBLIC_ROUTES: Route[] = ['/verified'];
 
 const NavContext = createContext<Nav | null>(null);
 
@@ -75,27 +78,27 @@ export function withQuery(route: Route, params?: Record<string, string>) {
   return q ? `${route}?${q}` : route;
 }
 
-/* ---------- Photos ---------- */
+/* ---------- Device features (photos, Stripe ID check) ---------- */
 
-const PhotoContext = createContext<PhotoPicker | null>(null);
+const DeviceContext = createContext<DeviceServices | null>(null);
 
-export function usePhotoPicker() {
-  const p = useContext(PhotoContext);
-  if (!p) throw new Error('usePhotoPicker must be used inside <AppProviders>');
-  return p;
+export function useDevice() {
+  const d = useContext(DeviceContext);
+  if (!d) throw new Error('useDevice must be used inside <AppProviders>');
+  return d;
 }
 
 /* ---------- All together ---------- */
 
-export function AppProviders({ api, nav, photos, children }: { api: Api; nav: Nav; photos: PhotoPicker; children: ReactNode }) {
+export function AppProviders({ api, nav, device, children }: { api: Api; nav: Nav; device: DeviceServices; children: ReactNode }) {
   const navValue = useMemo(() => nav, [nav]);
   return (
     <ApiContext.Provider value={api}>
-      <PhotoContext.Provider value={photos}>
+      <DeviceContext.Provider value={device}>
         <AuthProvider api={api}>
           <NavContext.Provider value={navValue}>{children}</NavContext.Provider>
         </AuthProvider>
-      </PhotoContext.Provider>
+      </DeviceContext.Provider>
     </ApiContext.Provider>
   );
 }

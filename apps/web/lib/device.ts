@@ -1,12 +1,20 @@
 'use client';
 
-import type { PhotoPicker, PickedPhoto } from '@lift2lift/app';
+import type { DeviceServices, PickedPhoto } from '@lift2lift/app';
 
 const MAX_SIDE = 1800; // px; plenty to read a license, keeps uploads small
 
-/** Opens the file chooser (on phones this offers the camera too), then shrinks the photo to a JPEG. */
-export const webPhotoPicker: PhotoPicker = {
-  pick() {
+export const webDevice: DeviceServices = {
+  platform: 'web',
+
+  /** Stripe's hosted ID check; it sends the person back to /account/driver?verify=done. */
+  openIdentityCheck(url) {
+    window.location.assign(url);
+    return new Promise<void>(() => {}); // the page is leaving
+  },
+
+  /** Opens the file chooser (on phones this offers the camera too), then shrinks the photo to a JPEG. */
+  pickPhoto() {
     return new Promise<PickedPhoto | null>((resolve, reject) => {
       const input = document.createElement('input');
       input.type = 'file';

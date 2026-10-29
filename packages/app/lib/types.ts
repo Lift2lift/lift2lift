@@ -34,16 +34,25 @@ export type BoardRide = {
   driverVerified: boolean; // license + insurance photos on file
 };
 
-export type DriverDoc = 'license' | 'insurance';
+/** Documents drivers upload themselves. (The license is scanned in the ID check.) */
+export type DriverDoc = 'insurance';
 
-/** Where a driver is in license + insurance verification. */
+/** Stripe Identity: license scan + live selfie matched to the license photo. */
+export type IdentityStatus = 'none' | 'pending' | 'processing' | 'verified' | 'requires_input' | 'canceled';
+
+/** Where a driver is in verification: ID check + insurance photo. */
 export type DriverVerification = {
-  /** incomplete: photos missing · submitted: can host · approved: checked by the team · rejected: needs a new photo */
+  /** incomplete: a step is missing · submitted: can host · approved: checked by the team · rejected: needs fixing */
   status: 'incomplete' | 'submitted' | 'approved' | 'rejected';
-  hasLicense: boolean;
+  identity: IdentityStatus;
+  /** Stripe's reason when the check needs another try, e.g. selfie_face_mismatch. */
+  identityError: string | null;
+  /** Name on the license, from the ID check. Shown only to the driver. */
+  idName: string | null;
+  /** Agreed to the selfie check (Colorado biometric consent). */
+  consented: boolean;
   hasInsurance: boolean;
-  /** Short-lived links to the person's own photos, for thumbnails. */
-  licenseUrl: string | null;
+  /** Short-lived link to the person's own insurance photo, for the thumbnail. */
   insuranceUrl: string | null;
   reviewNote: string | null;
 };
@@ -60,9 +69,13 @@ export type PickedPhoto = {
   previewUri: string;
 };
 
-/** Each app supplies its own photo picker (file input on web, camera/library on iOS). */
-export interface PhotoPicker {
-  pick(): Promise<PickedPhoto | null>;
+/** Device features each app supplies: photo picking and opening Stripe's ID check. */
+export interface DeviceServices {
+  platform: 'web' | 'ios';
+  /** File chooser on web, camera or library on iOS. Null if cancelled. */
+  pickPhoto(): Promise<PickedPhoto | null>;
+  /** Opens Stripe's hosted ID check. On web this leaves the page; on iOS it resolves when the browser closes. */
+  openIdentityCheck(url: string): Promise<void>;
 }
 
 export type NewRide = {
@@ -114,6 +127,9 @@ export interface Api {
 
   getDriverVerification(options?: { withPhotos?: boolean }): Promise<DriverVerification>;
   uploadDriverDoc(doc: DriverDoc, photo: PickedPhoto): Promise<DriverVerification>;
+  giveBiometricConsent(): Promise<void>;
+  /** Starts or resumes the Stripe ID check. Returns the hosted page to open, unless it's already processing or done. */
+  startIdentityCheck(platform: DeviceServices['platform']): Promise<{ url?: string; status: 'pending' | 'processing' | 'verified' }>;
 
   getForecast(): Promise<Forecast>;
 }

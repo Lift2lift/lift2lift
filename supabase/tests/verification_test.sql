@@ -35,27 +35,38 @@ do $$ begin
   end;
 end $$;
 
--- ===== Driver verification =====
+-- ===== Driver verification: ID + selfie (Stripe) and insurance photo =====
 set role authenticated;
 select set_config('request.jwt.claim.sub', '66666666-6666-4666-8666-666666666666', false);
 do $$
 declare v jsonb;
 begin
-  -- Nothing uploaded: can't host.
+  -- Nothing done: can't host.
   begin
     insert into public.rides (resort_id, depart_at, leave_from, seats_total, gas_per_rider, contact)
     values ('keystone', date_trunc('day', now()) + interval '12 days 15 hours', 'Kittredge', 3, 10, '303');
     raise exception 'FAIL: unverified driver posted';
   exception when raise_exception then
-    assert sqlerrm like 'Add photos of your driver''s license and insurance card%', sqlerrm;
+    assert sqlerrm like 'Verify your ID with a quick selfie%', sqlerrm;
   end;
 
   v := public.driver_verification_status();
-  assert v->>'status' = 'incomplete', v::text;
+  assert v->>'status' = 'incomplete' and v->>'identity_status' = 'none' and not (v->>'consented')::boolean, v::text;
+
+  -- Consent is recorded before the selfie check.
+  perform public.give_biometric_consent();
+  assert (public.driver_verification_status()->>'consented')::boolean, 'consent recorded';
+
+  -- The app can't write Stripe results itself.
+  begin
+    perform public.apply_identity_result(auth.uid(), 'vs_fake', 'verified');
+    raise exception 'FAIL: app wrote its own ID result';
+  exception when insufficient_privilege then null;
+  end;
 
   -- Can't upload into someone else's folder, or with a random file name.
   begin
-    insert into storage.objects (bucket_id, name) values ('driver-docs', '77777777-7777-4777-8777-777777777777/license.jpg');
+    insert into storage.objects (bucket_id, name) values ('driver-docs', '77777777-7777-4777-8777-777777777777/insurance.jpg');
     raise exception 'FAIL: uploaded into another user''s folder';
   exception when insufficient_privilege then null;
   end;
@@ -65,15 +76,34 @@ begin
   exception when insufficient_privilege then null;
   end;
 
-  -- License only: still incomplete.
-  insert into storage.objects (bucket_id, name) values ('driver-docs', '66666666-6666-4666-8666-666666666666/license.jpg');
-  v := public.driver_verification_status();
-  assert v->>'status' = 'incomplete' and (v->>'has_license')::boolean and not (v->>'has_insurance')::boolean, v::text;
-
-  -- Insurance too: submitted, and hosting works right away.
+  -- Insurance alone isn't enough.
   insert into storage.objects (bucket_id, name) values ('driver-docs', '66666666-6666-4666-8666-666666666666/insurance.heic');
   v := public.driver_verification_status();
-  assert v->>'status' = 'submitted', v::text;
+  assert v->>'status' = 'incomplete' and (v->>'has_insurance')::boolean, v::text;
+end $$;
+reset role;
+
+-- Stripe flow, as the edge functions would call it with the service role.
+select public.set_identity_session('66666666-6666-4666-8666-666666666666', 'vs_1');
+do $$ begin
+  assert public.apply_identity_result('66666666-6666-4666-8666-666666666666', 'vs_old', 'verified') = 'ignored', 'stale session ignored';
+  assert public.apply_identity_result('66666666-6666-4666-8666-666666666666', 'vs_1', 'requires_input', 'selfie_face_mismatch') = 'updated', 'mismatch saved';
+  assert (select identity_status = 'requires_input' and identity_error = 'selfie_face_mismatch' and status = 'incomplete'
+          from public.driver_verifications where user_id = '66666666-6666-4666-8666-666666666666'), 'face mismatch blocks hosting';
+  -- Retry succeeds.
+  perform public.set_identity_session('66666666-6666-4666-8666-666666666666', 'vs_2');
+  assert public.apply_identity_result('66666666-6666-4666-8666-666666666666', 'vs_2', 'verified', null, 'Casey', 'Driver') = 'updated', 'verified saved';
+  -- A late "processing" event can't undo a finished check.
+  assert public.apply_identity_result('66666666-6666-4666-8666-666666666666', 'vs_2', 'processing') = 'ignored', 'no downgrade';
+end $$;
+
+select set_config('request.jwt.claim.sub', '66666666-6666-4666-8666-666666666666', false);
+set role authenticated;
+do $$
+declare v jsonb;
+begin
+  v := public.driver_verification_status();
+  assert v->>'status' = 'submitted' and v->>'identity_status' = 'verified' and v->>'id_name' = 'Casey Driver', v::text;
 
   insert into public.rides (resort_id, depart_at, leave_from, seats_total, gas_per_rider, contact)
   values ('keystone', date_trunc('day', now()) + interval '12 days 15 hours', 'Kittredge', 3, 10, '303');

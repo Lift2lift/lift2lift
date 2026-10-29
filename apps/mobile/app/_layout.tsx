@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { api, isConfigured } from '../lib/api';
-import { nativePhotoPicker } from '../lib/photos';
+import { nativeDevice } from '../lib/device';
 
 function RootStack() {
   const { session, loading } = useAuth();
@@ -56,7 +56,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AppProviders api={api} nav={nav} photos={nativePhotoPicker}>
+      <AppProviders api={api} nav={nav} device={nativeDevice}>
         <StatusBar style="light" />
         <RootStack />
       </AppProviders>

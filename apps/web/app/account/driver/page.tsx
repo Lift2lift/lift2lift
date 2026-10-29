@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 
 function Screen() {
   const q = useSearchParams();
-  return <DriverVerificationScreen then={q.get('then') ?? undefined} />;
+  return <DriverVerificationScreen then={q.get('then') ?? undefined} verifyDone={q.get('verify') === 'done'} />;
 }
 
 export default function Page() {

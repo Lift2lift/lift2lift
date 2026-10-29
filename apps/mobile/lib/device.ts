@@ -1,6 +1,7 @@
-import type { PhotoPicker } from '@lift2lift/app';
+import type { DeviceServices } from '@lift2lift/app';
 import { decode } from 'base64-arraybuffer';
 import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import { ActionSheetIOS, Alert, Platform } from 'react-native';
 
 function chooseSource(): Promise<'camera' | 'library' | null> {
@@ -20,9 +21,16 @@ function chooseSource(): Promise<'camera' | 'library' | null> {
   });
 }
 
-/** Camera or photo library, compressed to JPEG, read as bytes for Supabase Storage. */
-export const nativePhotoPicker: PhotoPicker = {
-  async pick() {
+export const nativeDevice: DeviceServices = {
+  platform: 'ios',
+
+  /** Stripe's hosted ID check in an in-app browser. Resolves when the person closes it. */
+  async openIdentityCheck(url) {
+    await WebBrowser.openBrowserAsync(url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET });
+  },
+
+  /** Camera or photo library, compressed to JPEG, read as bytes for Supabase Storage. */
+  async pickPhoto() {
     const source = await chooseSource();
     if (!source) return null;
     if (source === 'camera') {

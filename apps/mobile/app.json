@@ -15,8 +15,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Lift2Lift uses your photos so you can upload your driver's license and insurance card.",
-          "cameraPermission": "Lift2Lift uses the camera so you can snap your driver's license and insurance card."
+          "photosPermission": "Lift2Lift uses your photos so you can upload your insurance card.",
+          "cameraPermission": "Lift2Lift uses the camera so you can snap your insurance card."
         }
       ]
     ]

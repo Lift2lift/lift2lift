@@ -30,7 +30,11 @@ supabase/
 - **Call shotgun**: claim a seat, bail on a seat. Drivers see who's riding, can remove riders and can cancel the ride.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders who claimed a seat.
 - **Post a ride**: tap-to-pick mountain, day, time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
-- **Driver verification**: the first time someone taps **Post a ride**, a pop-up sends them to **Account → Driver verification** to snap a photo of their driver's license and insurance card. Once both are uploaded they can host right away, and riders see **“License & insurance on file”** on their rides. Photos are private: only the driver and the team can see them.
+- **Driver verification**: the first time someone taps **Post a ride**, a pop-up sends them to **Account → Driver verification** for two steps:
+  1. **ID check with a selfie** (Stripe Identity): scan the license, take a live selfie, and Stripe confirms the license is real and the face matches its photo. Lift2Lift never receives the selfie or face scan, and the server asks Stripe to delete the images right after a successful check.
+  2. **Insurance card photo**, stored privately.
+
+  Once both are done they can host right away, and riders see **“ID verified · insurance on file”**.
 - **Account settings**: name, CU email status, driver verification, sign out.
 - **Colorado carpool rules**: built in and enforced by the database (see below).
 - **Snow**: the biggest snow days this week, plus a 7-day grid for every Colorado ski area, sortable by drive time or total snow. Tap a mountain to see rides there.
@@ -57,13 +61,37 @@ Lift2Lift is built to qualify as a **carpooling service internet application** u
 - [ ] **Each January**, add the new IRS rate to the `mileage_rates` table (a new migration) and to `MILEAGE_CENTS` in `rules.ts`.
 - [ ] **Talk to a lawyer** about terms of service and keeping Lift2Lift not-for-profit. CU's [Entrepreneurial Law Clinic](https://www.colorado.edu/law/academics/clinics/entrepreneurial-law-clinic) helps student startups for free.
 
-## Reviewing driver photos
+## ID check with a selfie (Stripe Identity)
 
-Uploading both photos lets a driver host immediately ("submitted"). To spot-check:
+Each check costs **$1.50**, and **the first 50 are free**. Stripe runs the license scan, the live selfie and the face match on its own hosted page, so it works the same on the website and the iPhone app (no native SDK, and it works in Expo Go).
 
-1. **Supabase dashboard → Storage → driver-docs**: each driver has a folder named by user id, holding `license.*` and `insurance.*`.
-2. **Table editor → driver_verifications**: set `status` to `approved`, or to `rejected` with a `review_note` (for example "Insurance card is expired."). Set `reviewed_at` to now.
-3. A rejected driver loses the badge and can't post new rides. They see your note in Driver verification, and uploading a new photo resubmits.
+```
+App ── identity-start ──▶ Stripe hosted page (license + selfie) ──▶ identity-webhook ──▶ driver_verifications
+```
+
+**Set up (about 15 minutes):**
+
+1. Create a Stripe account and turn on **Identity** (Dashboard → Identity). Use **test mode** while building: test mode never charges, and Stripe's test page lets you pick "verified" or a failure.
+2. Copy `supabase/functions/.env.example` to `supabase/functions/.env` and add your `sk_test_…` key.
+3. Run the functions locally: `npx supabase functions serve --env-file supabase/functions/.env`
+4. Forward Stripe events: `stripe listen --events identity.verification_session.verified,identity.verification_session.requires_input,identity.verification_session.processing,identity.verification_session.canceled --forward-to http://127.0.0.1:54321/functions/v1/identity-webhook`. Put the `whsec_…` it prints in `.env`.
+
+**Going live:**
+
+1. `npx supabase functions deploy identity-start identity-webhook`
+2. `npx supabase secrets set --env-file supabase/functions/.env`, using live keys, your real `SITE_URL` and `ALLOWED_ORIGINS`.
+3. In Stripe → Developers → Webhooks, add `https://aqoqfsesceiykkoahnej.supabase.co/functions/v1/identity-webhook` with the four `identity.verification_session.*` events, and set its signing secret as `STRIPE_IDENTITY_WEBHOOK_SECRET`.
+4. Publish the biometric policy (`docs/biometric-privacy-policy.md`, a draft for a lawyer to review) on the website.
+
+**Privacy by design:** Lift2Lift stores only the result, Stripe's reason code when a check fails, the name on the license and the consent date. With `REDACT_AFTER_CHECK=true` (the default), the webhook asks Stripe to delete the license images and selfie as soon as a check passes.
+
+## Reviewing drivers
+
+A verified ID plus an insurance photo lets a driver host immediately ("submitted"). To spot-check:
+
+1. **Table editor → driver_verifications**: compare `id_first_name` / `id_last_name` (from the license) with the account name in `profiles`.
+2. **Storage → driver-docs**: each driver's folder holds `insurance.*`. Check the name and policy dates.
+3. Set `status` to `approved`, or to `rejected` with a `review_note` (for example "Insurance card is expired."), and set `reviewed_at` to now. A rejected driver loses the badge and can't post new rides until they upload a new photo or redo the ID check.
 
 ## Run it locally
 
@@ -139,16 +167,21 @@ npm run db:push     # applies supabase/migrations to the hosted database
 | `ride_contact(ride)` | Returns the driver's contact to the driver and seated riders only | Signed-in users |
 | `ride_board` view | Upcoming rides with driver name, seat count, rider names, gas cap and the driver's verified badge | Signed-in users |
 | `allowed_email_domains` | Email domains that can sign up (`colorado.edu`). A trigger on `auth.users` rejects everything else | Anyone reads |
-| `driver_verifications` | License + insurance status per driver: incomplete, submitted, approved, rejected | Drivers read their own; only the team writes |
-| `driver-docs` storage bucket | Private license and insurance photos at `<user id>/license.*` and `insurance.*` | Each driver uploads and sees only their own |
-| `driver_verification_status()` | Checks what's uploaded, updates and returns the status | Signed-in users |
+| `driver_verifications` | Per driver: ID check result (from Stripe), name on license, consent date, insurance photo, overall status (incomplete, submitted, approved, rejected) | Drivers read their own; only the team and the webhook write |
+| `driver-docs` storage bucket | Private insurance photos at `<user id>/insurance.*` | Each driver uploads and sees only their own |
+| `driver_verification_status()` | Checks what's done, updates and returns the status | Signed-in users |
+| `give_biometric_consent()` | Records consent before the selfie check | Signed-in users |
+| `apply_identity_result()` / `set_identity_session()` | Save Stripe results. Ignores events from old sessions and never downgrades a finished check | Edge functions only (service role) |
+| `identity-start` edge function | Starts or resumes a Stripe check (license only, live capture, matching selfie) | Signed-in users |
+| `identity-webhook` edge function | Verifies Stripe's signature, saves the result, redacts images | Stripe |
 
-The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), photo privacy, hosting before and after upload, rejection and resubmission. To run them against plain Postgres:
+The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), consent, photo privacy, face mismatch then retry, stale Stripe events, no self-approval, rejection and resubmission. To run them against plain Postgres:
 
 ```bash
 psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/20261029000001_init.sql \
   -f supabase/migrations/20261029000002_colorado_carpool_rules.sql \
-  -f supabase/migrations/20261029000003_cu_email_and_driver_verification.sql -f supabase/seed.sql \
+  -f supabase/migrations/20261029000003_cu_email_and_driver_verification.sql \
+  -f supabase/migrations/20261029000004_identity_selfie_check.sql -f supabase/seed.sql \
   -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql
 ```
 

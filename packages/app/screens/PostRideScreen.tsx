@@ -120,14 +120,14 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
           >
             <Text style={{ color: t.ink, fontSize: 24, fontWeight: '900' }}>Before your first ride</Text>
             <Text style={{ color: t.muted, fontSize: 15, lineHeight: 22 }}>
-              Lift2Lift drivers add a photo of their driver's license and insurance card. It takes about a minute, and you only do it once.
+              Lift2Lift drivers verify their ID and add their insurance card. It takes about a minute, and you only do it once.
             </Text>
             <View style={{ gap: 6 }}>
-              <Text style={{ color: t.ink, fontSize: 15 }}>1. Snap your license</Text>
+              <Text style={{ color: t.ink, fontSize: 15 }}>1. Scan your license and take a quick selfie</Text>
               <Text style={{ color: t.ink, fontSize: 15 }}>2. Snap your insurance card</Text>
               <Text style={{ color: t.ink, fontSize: 15 }}>3. Post your ride</Text>
             </View>
-            <Button title="Add my photos" onPress={() => nav.replace('/account/driver', { then: 'post' })} />
+            <Button title="Get verified" onPress={() => nav.replace('/account/driver', { then: 'post' })} />
             <Button title="Not now" variant="ghost" onPress={() => nav.back()} />
           </View>
         </View>

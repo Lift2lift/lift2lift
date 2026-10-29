@@ -219,7 +219,7 @@ export function RideCard({
               {mine ? "You're driving" : `Driver: ${ride.driverName || 'A student'}`}
             </Text>
             {ride.driverVerified ? (
-              <Text style={{ color: t.ok, fontSize: 12, fontWeight: '700' }}>✓ License & insurance on file</Text>
+              <Text style={{ color: t.ok, fontSize: 12, fontWeight: '700' }}>✓ ID verified · insurance on file</Text>
             ) : null}
             {(mine || riding) &&
               (contact ? (

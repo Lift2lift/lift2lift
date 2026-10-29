@@ -1,12 +1,12 @@
 'use client';
 
-import { AppProviders, AUTH_ROUTES, Loading, useAuth, withQuery, type Nav, type Route } from '@lift2lift/app';
+import { AppProviders, AUTH_ROUTES, Loading, PUBLIC_ROUTES, useAuth, withQuery, type Nav, type Route } from '@lift2lift/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getApi } from '../lib/api';
-import { webPhotoPicker } from '../lib/photos';
+import { webDevice } from '../lib/device';
 
 /** Sends signed-out people to sign-in, and signed-in people away from it. */
 function AuthGate({ children }: { children: ReactNode }) {
@@ -14,13 +14,14 @@ function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() as Route;
   const router = useRouter();
   const onAuthPage = AUTH_ROUTES.includes(pathname);
-  const allowed = loading ? false : session ? !onAuthPage : onAuthPage;
+  const isPublic = PUBLIC_ROUTES.includes(pathname);
+  const allowed = isPublic || (loading ? false : session ? !onAuthPage : onAuthPage);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || isPublic) return;
     if (!session && !onAuthPage) router.replace('/sign-in');
     if (session && onAuthPage) router.replace('/');
-  }, [loading, session, onAuthPage, router]);
+  }, [loading, session, onAuthPage, isPublic, router]);
 
   if (!allowed) return <Loading label="Loading…" />;
   return <>{children}</>;
@@ -63,7 +64,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <SafeAreaProvider>
-      <AppProviders api={getApi()} nav={nav} photos={webPhotoPicker}>
+      <AppProviders api={getApi()} nav={nav} device={webDevice}>
         <View style={{ flex: 1, minHeight: '100%' as unknown as number }}>
           <AuthGate>{children}</AuthGate>
         </View>

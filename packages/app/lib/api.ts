@@ -24,9 +24,11 @@ type BoardRow = {
 
 type VerificationRow = {
   status: DriverVerification['status'];
-  has_license: boolean;
+  identity_status: DriverVerification['identity'];
+  identity_error: string | null;
+  id_name: string | null;
+  consented: boolean;
   has_insurance: boolean;
-  license_path: string | null;
   insurance_path: string | null;
   review_note: string | null;
 };
@@ -182,12 +184,32 @@ export function createApi(supabase: SupabaseClient): Api {
       };
       return {
         status: v.status,
-        hasLicense: v.has_license,
+        identity: v.identity_status,
+        identityError: v.identity_error,
+        idName: v.id_name,
+        consented: v.consented,
         hasInsurance: v.has_insurance,
-        licenseUrl: await signed(v.license_path),
         insuranceUrl: await signed(v.insurance_path),
         reviewNote: v.review_note,
       };
+    },
+    async giveBiometricConsent() {
+      check(await supabase.rpc('give_biometric_consent'));
+    },
+    async startIdentityCheck(platform) {
+      const { data, error } = await supabase.functions.invoke('identity-start', { body: { platform } });
+      if (error) {
+        // The function's own message is in the response body.
+        let message = "Couldn't start the ID check. Try again in a minute.";
+        try {
+          const body = await (error as { context?: Response }).context?.json();
+          if (body?.error) message = body.error;
+        } catch {
+          // keep the default message
+        }
+        throw new Error(message);
+      }
+      return data as { url?: string; status: 'pending' | 'processing' | 'verified' };
     },
     async uploadDriverDoc(doc, photo) {
       const { data } = await supabase.auth.getSession();

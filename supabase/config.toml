@@ -56,6 +56,17 @@ content_path = "./supabase/templates/confirmation.html"
 subject = "Reset your Lift2Lift password"
 content_path = "./supabase/templates/recovery.html"
 
+# Edge functions for the ID + selfie check (supabase/functions).
+[edge_runtime]
+enabled = true
+
+[functions.identity-start]
+verify_jwt = true
+
+# Stripe calls this one; it checks the Stripe signature instead of a user token.
+[functions.identity-webhook]
+verify_jwt = false
+
 # Hosted project overrides, applied by `supabase config push`.
 # Without these the hosted Site URL stays at localhost and email links land there.
 [remotes.production]
