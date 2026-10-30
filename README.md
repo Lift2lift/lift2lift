@@ -36,6 +36,11 @@ supabase/
   3. **Interests**: Instagram-style chip picker in four groups, at least 3 and up to 12.
 
   Profile pages follow CorePower's teacher pages: big photo, name and home mountain, Instagram link, stats, upcoming rides, About, Q&A, interests and verified badges. Tap any driver or rider on a ride card to open theirs.
+- **Ratings and reviews (Airbnb-style)**: after a ride leaves, a "How was …?" card on the board asks each passenger to rate:
+  - **the driver**, with two scores: **Driving** (safe, ready for conditions, on time) and **Experience** (friendly, easy to coordinate with, good company)
+  - **each fellow passenger**: **Experience**
+
+  Ratings are half stars from 0.5 to 5. Tap a star (the left half gives a half star), slide across the row, or use the arrow keys. Text is optional. Reviews open when the ride leaves, close after 14 days, are one per person per ride, and can't be edited. Profiles show averages split by **as a driver** and **as a passenger**, with filterable reviews. Ride cards show the driver's driving rating.
 - **Driver verification**: the first time someone taps **Post a ride**, a pop-up sends them to **Account → Driver verification** for two steps:
   1. **ID check with a selfie** (Stripe Identity): scan the license, take a live selfie, and Stripe confirms the license is real and the face matches its photo. Lift2Lift never receives the selfie or face scan, and the server asks Stripe to delete the images right after a successful check.
   2. **Insurance card photo**, stored privately.
@@ -173,6 +178,9 @@ npm run db:push     # applies supabase/migrations to the hosted database
 | `ride_contact(ride)` | Returns the driver's contact to the driver and seated riders only | Signed-in users |
 | `ride_board` view | Upcoming rides with driver name, seat count, rider names, gas cap and the driver's verified badge | Signed-in users |
 | `allowed_email_domains` | Email domains that can sign up (`colorado.edu`). A trigger on `auth.users` rejects everything else | Anyone reads |
+| `reviews` | One per reviewer, per person, per ride: role, driving (drivers only), experience, optional text | Signed-in users read; written only through `submit_review()` |
+| `submit_review()` | Checks the reviewer was a passenger, the ride has left and is under 14 days old, the reviewee was on it, and the ratings are half stars | Signed-in users |
+| `reviews_to_write()` / `rating_summary()` / `reviews_for()` | Pending reviews, averages by role, recent reviews with reviewer info | Signed-in users |
 | `driver_verifications` | Per driver: ID check result (from Stripe), name on license, consent date, insurance photo, overall status (incomplete, submitted, approved, rejected) | Drivers read their own; only the team and the webhook write |
 | `driver-docs` storage bucket | Private insurance photos at `<user id>/insurance.*` | Each driver uploads and sees only their own |
 | `driver_verification_status()` | Checks what's done, updates and returns the status | Signed-in users |
@@ -188,8 +196,10 @@ psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/2026102900
   -f supabase/migrations/20261029000002_colorado_carpool_rules.sql \
   -f supabase/migrations/20261029000003_cu_email_and_driver_verification.sql \
   -f supabase/migrations/20261029000004_identity_selfie_check.sql -f supabase/migrations/20261030000005_profiles.sql \
+  -f supabase/migrations/20261030000006_reviews.sql \
   -f supabase/seed.sql -f supabase/tests/helpers.sql \
-  -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql
+  -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql \
+  -f supabase/tests/reviews_test.sql
 ```
 
 ## Options

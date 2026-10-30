@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { RideCard } from '../components/RideCard';
 import { SetupModal } from '../components/SetupModal';
@@ -8,7 +8,7 @@ import { dayLabel, driveText, isoDay, longDay, nextDays } from '../lib/dates';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
-import type { BoardRide } from '../lib/types';
+import type { BoardRide, PendingReview } from '../lib/types';
 import { useForecast } from '../lib/useForecast';
 import { useApi, useAuth, useNav } from '../providers';
 
@@ -24,6 +24,10 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
   const [message, setMessage] = useState<{ text: string; kind: 'error' | 'success' } | null>(null);
   const [day, setDay] = useState(initialDay || 'all');
   const [profileReady, setProfileReady] = useState(true);
+  const [toReview, setToReview] = useState<PendingReview[]>([]);
+  useEffect(() => {
+    api.reviewsToWrite().then(setToReview).catch(() => {});
+  }, [api]);
   const [setupOpen, setSetupOpen] = useState(false);
   useEffect(() => {
     if (!session) return;
@@ -111,6 +115,27 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
             Carpool apps aren't regulated by the state of Colorado. Drivers might not be background-checked, and vehicles and insurance
             aren't state-verified. Full notice at the bottom.
           </Text>
+
+          {toReview.map((r) => {
+            const driver = r.people.find((p) => p.role === 'driver');
+            const others = r.people.filter((p) => p.role === 'passenger').length;
+            const who = [driver ? driver.name.split(' ')[0] : null, others ? `${others} passenger${others > 1 ? 's' : ''}` : null].filter(Boolean).join(' and ');
+            return (
+              <Pressable
+                key={r.rideId}
+                onPress={() => nav.push('/review', { ride: r.rideId })}
+                accessibilityRole="button"
+                style={({ pressed }) => ({ backgroundColor: t.surface, borderColor: t.accent, borderWidth: 2, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: pressed ? 0.85 : 1 })}
+              >
+                <Text style={{ color: t.accent, fontSize: 26 }}>★</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>How was {RESORT_BY_ID[r.resortId]?.name ?? 'your ride'}?</Text>
+                  <Text style={{ color: t.muted, fontSize: 13 }}>Rate {who}. Takes 30 seconds.</Text>
+                </View>
+                <Text style={{ color: t.muted, fontSize: 20 }}>›</Text>
+              </Pressable>
+            );
+          })}
 
           {message ? <Notice kind={message.kind}>{message.text}</Notice> : null}
 

@@ -36,6 +36,42 @@ export type BoardRide = {
   driverGender: Gender | null;
   riderAvatarUrls: (string | null)[];
   riderGenders: (Gender | null)[];
+  driverDrivingAvg: number | null;
+  driverExperienceAvg: number | null;
+  driverReviewCount: number;
+};
+
+/** Averages about one person, split by role. */
+export type RatingSummary = {
+  drivingAvg: number | null;
+  driverExperienceAvg: number | null;
+  driverCount: number;
+  passengerAvg: number | null;
+  passengerCount: number;
+};
+
+export type Review = {
+  id: string;
+  /** What the person being reviewed was on that ride. */
+  role: 'driver' | 'passenger';
+  driving: number | null;
+  experience: number;
+  body: string;
+  createdAt: string;
+  resortId: string;
+  reviewerId: string;
+  reviewerName: string;
+  reviewerAvatarUrl: string | null;
+  reviewerGender: Gender | null;
+};
+
+/** A past ride the signed-in passenger can still review. */
+export type PendingReview = {
+  rideId: string;
+  resortId: string;
+  departAt: string;
+  closesAt: string;
+  people: { id: string; role: 'driver' | 'passenger'; name: string; avatarUrl: string | null; gender: Gender | null }[];
 };
 
 export type Gender = 'man' | 'woman' | 'nonbinary' | 'unspecified';
@@ -160,6 +196,10 @@ export interface Api {
   rideContact(rideId: string): Promise<string | null>;
 
   getProfile(userId: string): Promise<ProfilePage | null>;
+
+  getReviews(userId: string): Promise<{ summary: RatingSummary; reviews: Review[] }>;
+  reviewsToWrite(): Promise<PendingReview[]>;
+  submitReview(r: { rideId: string; revieweeId: string; experience: number; driving?: number | null; body?: string }): Promise<void>;
   updateProfile(fields: Partial<ProfileFields>): Promise<void>;
   /** Marks setup finished. Returns what's still missing: 'photo' | 'name' | 'gender' | 'interests'. */
   completeProfile(): Promise<string[]>;

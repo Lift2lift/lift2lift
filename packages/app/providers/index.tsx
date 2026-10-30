@@ -48,6 +48,7 @@ export type Route =
   | '/profile'
   | '/profile/setup'
   | '/u'
+  | '/review'
   | '/verified'
   | '/sign-in'
   | '/sign-up'

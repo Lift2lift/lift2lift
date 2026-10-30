@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
+import { Stars } from '../components/Stars';
 import { Button, Card, FormScreen, Label, Loading, Notice } from '../components/ui';
 import { SCHOOL_NAME } from '../lib/config';
 import { clock, DOW, MON } from '../lib/dates';
 import { DISCIPLINE_LABEL, INTEREST_LABEL, PROFILE_PROMPTS } from '../lib/interests';
 import { RESORT_BY_ID } from '../lib/resorts';
 import { useTheme } from '../lib/theme';
-import type { ProfilePage } from '../lib/types';
+import type { ProfilePage, RatingSummary, Review } from '../lib/types';
 import { useApi, useAuth, useNav } from '../providers';
 
 /** A link to another website: a real link on the web, the system browser on iOS. */
@@ -49,6 +50,114 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
+function ScoreRow({ label, value, count }: { label: string; value: number | null; count: number }) {
+  const t = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 6 }}>
+      <Text style={{ color: t.ink, fontSize: 15, fontWeight: '700', flexShrink: 1 }}>{label}</Text>
+      {count && value != null ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Stars value={value} size={18} />
+          <Text style={{ color: t.ink, fontSize: 15, fontWeight: '800', minWidth: 30, textAlign: 'right' }}>{value.toFixed(1)}</Text>
+        </View>
+      ) : (
+        <Text style={{ color: t.muted, fontSize: 14 }}>No ratings yet</Text>
+      )}
+    </View>
+  );
+}
+
+function RatingsSection({
+  data,
+  first,
+  tab,
+  setTab,
+}: {
+  data: { summary: RatingSummary; reviews: Review[] };
+  first: string;
+  tab: 'all' | 'driver' | 'passenger';
+  setTab: (t: 'all' | 'driver' | 'passenger') => void;
+}) {
+  const t = useTheme();
+  const nav = useNav();
+  const s = data.summary;
+  const shown = data.reviews.filter((r) => tab === 'all' || r.role === tab);
+  const tabs: { id: typeof tab; label: string; n: number }[] = [
+    { id: 'all', label: 'All', n: data.reviews.length },
+    { id: 'driver', label: 'As driver', n: s.driverCount },
+    { id: 'passenger', label: 'As passenger', n: s.passengerCount },
+  ];
+  return (
+    <View style={{ gap: 10 }}>
+      <Label>Ratings</Label>
+      <Card style={{ paddingHorizontal: 16, paddingVertical: 10 }}>
+        <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginTop: 4 }}>
+          AS A DRIVER · {s.driverCount} REVIEW{s.driverCount === 1 ? '' : 'S'}
+        </Text>
+        <ScoreRow label="Driving" value={s.drivingAvg} count={s.driverCount} />
+        <ScoreRow label="Experience" value={s.driverExperienceAvg} count={s.driverCount} />
+        <View style={{ height: 1, backgroundColor: t.line, marginVertical: 6 }} />
+        <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.6 }}>
+          AS A PASSENGER · {s.passengerCount} REVIEW{s.passengerCount === 1 ? '' : 'S'}
+        </Text>
+        <ScoreRow label="Experience" value={s.passengerAvg} count={s.passengerCount} />
+      </Card>
+
+      {data.reviews.length ? (
+        <>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {tabs.map((x) => (
+              <Pressable
+                key={x.id}
+                onPress={() => setTab(x.id)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === x.id }}
+                style={{ borderRadius: 999, borderWidth: 1, borderColor: tab === x.id ? t.ink : t.line, backgroundColor: tab === x.id ? t.ink : t.surface, paddingHorizontal: 12, paddingVertical: 6 }}
+              >
+                <Text style={{ color: tab === x.id ? t.bg : t.ink, fontSize: 13, fontWeight: '700' }}>
+                  {x.label} <Text style={{ opacity: 0.65 }}>{x.n}</Text>
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {shown.length === 0 ? <Text style={{ color: t.muted, fontSize: 14 }}>No reviews here yet.</Text> : null}
+          {shown.map((r) => {
+            const d = new Date(r.createdAt);
+            return (
+              <Card key={r.id} style={{ padding: 14, gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Pressable onPress={() => nav.push('/u', { id: r.reviewerId })} accessibilityRole="link" accessibilityLabel={`${r.reviewerName}'s profile`}>
+                    <Avatar uri={r.reviewerAvatarUrl} name={r.reviewerName} gender={r.reviewerGender} size={38} />
+                  </Pressable>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: t.ink, fontSize: 15, fontWeight: '700' }}>{r.reviewerName || 'Lift2Lift member'}</Text>
+                    <Text style={{ color: t.muted, fontSize: 12 }}>
+                      {MON[d.getMonth()]} {d.getFullYear()} · {RESORT_BY_ID[r.resortId]?.name ?? r.resortId} · {first} was the {r.role}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
+                  {r.driving != null ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ color: t.muted, fontSize: 12, fontWeight: '700' }}>DRIVING</Text>
+                      <Stars value={r.driving} size={14} />
+                    </View>
+                  ) : null}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={{ color: t.muted, fontSize: 12, fontWeight: '700' }}>EXPERIENCE</Text>
+                    <Stars value={r.experience} size={14} />
+                  </View>
+                </View>
+                {r.body ? <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22 }}>{r.body}</Text> : null}
+              </Card>
+            );
+          })}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 /**
  * Profile page, laid out like a CorePower teacher page: big photo, name and
  * home mountain, the person's rides, a short bio, quick Q&A, and badges.
@@ -63,6 +172,13 @@ export function ProfileScreen({ userId }: { userId?: string }) {
   const mine = !!session && id === session.userId;
   const [p, setP] = useState<ProfilePage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ratings, setRatings] = useState<{ summary: RatingSummary; reviews: Review[] } | null>(null);
+  const [tab, setTab] = useState<'all' | 'driver' | 'passenger'>('all');
+
+  useEffect(() => {
+    if (!id) return;
+    api.getReviews(id).then(setRatings).catch(() => {});
+  }, [api, id]);
 
   useEffect(() => {
     if (!id) return;
@@ -123,6 +239,9 @@ export function ProfileScreen({ userId }: { userId?: string }) {
         <Stat value={String(p.ridesTaken)} label="Rides taken" />
         <Stat value={`${MON[since.getMonth()]} ’${String(since.getFullYear()).slice(2)}`} label="Member since" />
       </Card>
+
+      {/* Ratings */}
+      {ratings ? <RatingsSection data={ratings} first={first} tab={tab} setTab={setTab} /> : null}
 
       {/* Upcoming rides (CorePower's "See my classes") */}
       <View style={{ gap: 8 }}>

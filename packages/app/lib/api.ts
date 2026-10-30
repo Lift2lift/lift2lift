@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, DriverVerification, Gender, ProfileFields, ProfilePage, Session } from './types';
+import type { Api, BoardRide, DriverVerification, Gender, PendingReview, ProfileFields, ProfilePage, RatingSummary, Review, Session } from './types';
 
 type BoardRow = {
   id: string;
@@ -24,6 +24,9 @@ type BoardRow = {
   driver_gender: Gender | null;
   rider_avatar_paths: (string | null)[];
   rider_genders: (Gender | null)[];
+  driver_driving_avg: number | null;
+  driver_experience_avg: number | null;
+  driver_review_count: number;
 };
 
 type ProfileRow = {
@@ -64,7 +67,7 @@ type VerificationRow = {
 const DOCS_BUCKET = 'driver-docs';
 
 const BOARD_COLUMNS =
-  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders';
+  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders, driver_driving_avg, driver_experience_avg, driver_review_count';
 
 function toSession(s: SupabaseSession | null): Session | null {
   if (!s) return null;
@@ -97,6 +100,9 @@ function toRide(r: BoardRow, urls: Record<string, string>): BoardRide {
     driverGender: r.driver_gender,
     riderAvatarUrls: (r.rider_avatar_paths ?? []).map((p) => (p ? urls[p] ?? null : null)),
     riderGenders: r.rider_genders ?? [],
+    driverDrivingAvg: r.driver_driving_avg == null ? null : Number(r.driver_driving_avg),
+    driverExperienceAvg: r.driver_experience_avg == null ? null : Number(r.driver_experience_avg),
+    driverReviewCount: r.driver_review_count ?? 0,
   };
 }
 
@@ -258,6 +264,66 @@ export function createApi(supabase: SupabaseClient): Api {
       };
       return page;
     },
+    async getReviews(userId) {
+      const [sumRes, listRes] = await Promise.all([
+        supabase.rpc('rating_summary', { p_user_id: userId }),
+        supabase.rpc('reviews_for', { p_user_id: userId, p_limit: 50 }),
+      ]);
+      check(sumRes);
+      check(listRes);
+      const sRow = sumRes.data as Record<string, number | null>;
+      const num = (v: unknown) => (v == null ? null : Number(v));
+      const summary: RatingSummary = {
+        drivingAvg: num(sRow.driving_avg),
+        driverExperienceAvg: num(sRow.driver_experience_avg),
+        driverCount: Number(sRow.driver_count ?? 0),
+        passengerAvg: num(sRow.passenger_avg),
+        passengerCount: Number(sRow.passenger_count ?? 0),
+      };
+      const rows = (listRes.data ?? []) as Record<string, string | number | null>[];
+      const urls = await signAvatars(rows.map((r) => r.reviewer_avatar_path as string | null));
+      const reviews: Review[] = rows.map((r) => ({
+        id: String(r.id),
+        role: r.role as Review['role'],
+        driving: num(r.driving),
+        experience: Number(r.experience),
+        body: String(r.body ?? ''),
+        createdAt: String(r.created_at),
+        resortId: String(r.resort_id),
+        reviewerId: String(r.reviewer_id),
+        reviewerName: String(r.reviewer_name ?? ''),
+        reviewerAvatarUrl: r.reviewer_avatar_path ? urls[String(r.reviewer_avatar_path)] ?? null : null,
+        reviewerGender: (r.reviewer_gender as Gender | null) ?? null,
+      }));
+      return { summary, reviews };
+    },
+    async reviewsToWrite() {
+      const { data } = check(await supabase.rpc('reviews_to_write'));
+      type Row = { ride_id: string; resort_id: string; depart_at: string; closes_at: string; people: { id: string; role: 'driver' | 'passenger'; name: string; avatar_path: string | null; gender: Gender | null }[] };
+      const rows = (data ?? []) as Row[];
+      const urls = await signAvatars(rows.flatMap((r) => r.people.map((p) => p.avatar_path)));
+      return rows.map(
+        (r): PendingReview => ({
+          rideId: r.ride_id,
+          resortId: r.resort_id,
+          departAt: r.depart_at,
+          closesAt: r.closes_at,
+          people: r.people.map((p) => ({ id: p.id, role: p.role, name: p.name, gender: p.gender, avatarUrl: p.avatar_path ? urls[p.avatar_path] ?? null : null })),
+        }),
+      );
+    },
+    async submitReview(r) {
+      check(
+        await supabase.rpc('submit_review', {
+          p_ride_id: r.rideId,
+          p_reviewee_id: r.revieweeId,
+          p_experience: r.experience,
+          p_driving: r.driving ?? null,
+          p_body: r.body ?? '',
+        }),
+      );
+    },
+
     async updateProfile(f) {
       const { data } = await supabase.auth.getSession();
       const uid = data.session?.user.id;

@@ -12,6 +12,8 @@ export { PostRideScreen } from './screens/PostRideScreen';
 export { AccountScreen, DriverVerificationScreen, IdCheckDoneScreen } from './screens/AccountScreens';
 export { ProfileScreen } from './screens/ProfileScreen';
 export { ProfileSetupScreen } from './screens/ProfileSetupScreen';
+export { ReviewScreen } from './screens/ReviewScreen';
+export { Stars, StarInput, RatingBadge } from './components/Stars';
 export { Avatar, RING } from './components/Avatar';
 export * from './lib/interests';
 export { Loading } from './components/ui';

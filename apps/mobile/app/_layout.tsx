@@ -23,6 +23,7 @@ function RootStack() {
         <Stack.Screen name="profile/index" />
         <Stack.Screen name="profile/setup" />
         <Stack.Screen name="u" />
+        <Stack.Screen name="review" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />

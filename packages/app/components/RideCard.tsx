@@ -5,6 +5,7 @@ import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID } from '../lib/resorts';
 import { bookingClosed } from '../lib/rules';
 import { Avatar } from './Avatar';
+import { RatingBadge } from './Stars';
 import { useTheme } from '../lib/theme';
 import type { BoardRide, Forecast } from '../lib/types';
 import { useApi, useAuth, useNav } from '../providers';
@@ -241,6 +242,7 @@ export function RideCard({
                 </Text>
               )}
             </Text>
+            <RatingBadge value={ride.driverDrivingAvg} count={ride.driverReviewCount} label="driving" />
             {ride.driverVerified ? (
               <Text style={{ color: t.ok, fontSize: 12, fontWeight: '700' }}>✓ ID verified · insurance on file</Text>
             ) : null}
