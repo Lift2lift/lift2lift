@@ -47,7 +47,7 @@ begin
     values ('keystone', date_trunc('day', now()) + interval '12 days 15 hours', 'Kittredge', 3, 10, '303');
     raise exception 'FAIL: unverified driver posted';
   exception when raise_exception then
-    assert sqlerrm like 'Verify your ID with a quick selfie%', sqlerrm;
+    assert sqlerrm like 'Set up your profile first%', sqlerrm;
   end;
 
   v := public.driver_verification_status();
@@ -95,6 +95,9 @@ do $$ begin
   assert public.apply_identity_result('66666666-6666-4666-8666-666666666666', 'vs_2', 'verified', null, 'Casey', 'Driver') = 'updated', 'verified saved';
   -- A late "processing" event can't undo a finished check.
   assert public.apply_identity_result('66666666-6666-4666-8666-666666666666', 'vs_2', 'processing') = 'ignored', 'no downgrade';
+  -- The webhook saves the verified selfie as the profile photo (only for the current, verified session).
+  assert public.set_verified_avatar('66666666-6666-4666-8666-666666666666', 'vs_1', 'x/old.jpg') = 'ignored', 'old session photo ignored';
+  assert public.set_verified_avatar('66666666-6666-4666-8666-666666666666', 'vs_2', '66666666-6666-4666-8666-666666666666/a1.jpg') = 'updated', 'photo saved';
 end $$;
 
 select set_config('request.jwt.claim.sub', '66666666-6666-4666-8666-666666666666', false);
@@ -104,6 +107,43 @@ declare v jsonb;
 begin
   v := public.driver_verification_status();
   assert v->>'status' = 'submitted' and v->>'identity_status' = 'verified' and v->>'id_name' = 'Casey Driver', v::text;
+
+  -- Verified ID + insurance isn't enough: the profile has to be finished too.
+  begin
+    insert into public.rides (resort_id, depart_at, leave_from, seats_total, gas_per_rider, contact)
+    values ('keystone', date_trunc('day', now()) + interval '12 days 15 hours', 'Kittredge', 3, 10, '303');
+    raise exception 'FAIL: posted without a finished profile';
+  exception when raise_exception then
+    assert sqlerrm like 'Set up your profile first%', sqlerrm;
+  end;
+  assert public.complete_profile() = '["gender", "interests"]'::jsonb, public.complete_profile()::text;
+
+  -- Can't set your own photo (it has to be the verified selfie), or pick made-up interests.
+  begin
+    update public.profiles set avatar_path = 'someone-else.jpg' where id = auth.uid();
+    raise exception 'FAIL: set own photo';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.profiles set interests = '{skiing,crime}' where id = auth.uid();
+    raise exception 'FAIL: made-up interest';
+  exception when raise_exception then null;
+  end;
+  begin
+    update public.profiles set instagram = 'bad handle!' where id = auth.uid();
+    raise exception 'FAIL: bad instagram';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set prompts = '{"favorite_crime": "x"}' where id = auth.uid();
+    raise exception 'FAIL: unknown prompt';
+  exception when check_violation then null;
+  end;
+
+  update public.profiles set gender = 'man', interests = '{skiing,backcountry,photography}', instagram = '@Eli_Zatz',
+    bio = 'Photographer.', prompts = '{"go_to_run": "Pali"}' where id = auth.uid();
+  assert (select instagram from public.profiles where id = auth.uid()) = 'eli_zatz', 'instagram normalized';
+  assert public.complete_profile() = '[]'::jsonb, 'profile complete';
 
   insert into public.rides (resort_id, depart_at, leave_from, seats_total, gas_per_rider, contact)
   values ('keystone', date_trunc('day', now()) + interval '12 days 15 hours', 'Kittredge', 3, 10, '303');
@@ -126,6 +166,24 @@ do $$ begin
   assert (select count(*) from public.driver_verifications) = 0, 'cannot read other verifications';
   -- ...but does see that Casey is verified on the board.
   assert (select driver_verified from public.ride_board where driver_name = 'Casey'), 'others see the badge';
+  assert (select driver_gender = 'man' and driver_avatar_path is not null from public.ride_board where driver_name = 'Casey'), 'board shows photo + ring';
+  -- Profile page: visible to signed-in users, with badges, Instagram and upcoming rides.
+  assert (public.profile_page('66666666-6666-4666-8666-666666666666')->>'instagram') = 'eli_zatz', 'profile page instagram';
+  assert (public.profile_page('66666666-6666-4666-8666-666666666666')->>'id_verified')::boolean, 'profile page badge';
+  assert jsonb_array_length(public.profile_page('66666666-6666-4666-8666-666666666666')->'upcoming') = 1, 'profile page rides';
+  -- Can't claim a seat without a finished profile.
+  begin
+    perform public.claim_seat((select id from public.rides where driver_id = '66666666-6666-4666-8666-666666666666' and cancelled_at is null));
+    raise exception 'FAIL: rider without profile claimed';
+  exception when raise_exception then
+    assert sqlerrm like 'Set up your profile first%', sqlerrm;
+  end;
+  -- ...and can't reach the old function directly.
+  begin
+    perform public.claim_seat_rules(gen_random_uuid());
+    raise exception 'FAIL: bypassed profile check';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 reset role;
 

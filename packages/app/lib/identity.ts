@@ -28,4 +28,4 @@ export function identityErrorMessage(code: string | null) {
 
 /** Shown before the selfie check starts. Colorado treats face scans as biometric data, which needs consent. */
 export const BIOMETRIC_CONSENT =
-  "To confirm the license is yours, our ID partner Stripe compares a live selfie with your license photo. This creates a face scan, which Colorado law treats as biometric data. Stripe does the comparison: Lift2Lift never receives your selfie or face scan. We ask Stripe to delete your license images and selfie as soon as the check is done, and keep only the result and the name on your license. You only need this to host rides.";
+  "To confirm the license is yours, our ID partner Stripe compares a live selfie with your license photo. This creates a face scan, which Colorado law treats as biometric data. Stripe does the comparison: Lift2Lift never receives the face scan or your license images. When the check passes, your selfie becomes your profile photo, which other Lift2Lift members can see. Then we ask Stripe to delete your license images, selfie and face scan, and keep only the result and the name on your license.";

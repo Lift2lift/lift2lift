@@ -108,6 +108,15 @@ export function AppHeader() {
             <Pressable
               onPress={() => {
                 setMenuOpen(false);
+                nav.push('/profile');
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: t.ink, fontWeight: '700' }}>My profile</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setMenuOpen(false);
                 nav.push('/account');
               }}
               accessibilityRole="button"

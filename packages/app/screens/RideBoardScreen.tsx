@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { RideCard } from '../components/RideCard';
+import { SetupModal } from '../components/SetupModal';
 import { Button, Chip, ChipRow, Loading, Notice } from '../components/ui';
 import { dayLabel, driveText, isoDay, longDay, nextDays } from '../lib/dates';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
@@ -22,6 +23,12 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<{ text: string; kind: 'error' | 'success' } | null>(null);
   const [day, setDay] = useState(initialDay || 'all');
+  const [profileReady, setProfileReady] = useState(true);
+  const [setupOpen, setSetupOpen] = useState(false);
+  useEffect(() => {
+    if (!session) return;
+    api.getProfile(session.userId).then((p) => setProfileReady(!!p?.profileComplete)).catch(() => {});
+  }, [api, session]);
   const [resort, setResort] = useState(initialResort && RESORT_BY_ID[initialResort] ? initialResort : 'all');
   const [openOnly, setOpenOnly] = useState(false);
 
@@ -64,6 +71,7 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
       <AppHeader />
+      <SetupModal visible={setupOpen} role="rider" profileReady={profileReady} onClose={() => setSetupOpen(false)} />
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 18, paddingBottom: 60 }}
         refreshControl={
@@ -138,7 +146,7 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
               {shown.map((r) => (
                 <View key={r.id} style={{ flexGrow: 1, flexBasis: 420, maxWidth: '100%' }}>
-                  <RideCard ride={r} forecast={forecast} busyDays={busyDays} onChanged={load} onMessage={(text, kind = 'success') => setMessage({ text, kind })} />
+                  <RideCard ride={r} forecast={forecast} busyDays={busyDays} profileReady={profileReady} onNeedsSetup={() => setSetupOpen(true)} onChanged={load} onMessage={(text, kind = 'success') => setMessage({ text, kind })} />
                 </View>
               ))}
             </View>

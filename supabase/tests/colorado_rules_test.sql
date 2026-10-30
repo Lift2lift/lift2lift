@@ -8,6 +8,8 @@ insert into auth.users (id, email, raw_user_meta_data) values
 insert into public.driver_verifications (user_id, status) values
   ('44444444-4444-4444-8444-444444444444', 'submitted'),
   ('55555555-5555-4555-8555-555555555555', 'submitted');
+select public.test_make_ready('44444444-4444-4444-8444-444444444444');
+select public.test_make_ready('55555555-5555-4555-8555-555555555555');
 
 do $$ begin
   assert public.gas_cap_dollars('eldora', '2026-12-05 08:00-07') = 30, 'Eldora: 42 mi × 72.5¢ = $30';

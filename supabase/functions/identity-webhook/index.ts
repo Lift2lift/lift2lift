@@ -2,14 +2,53 @@
 // app, so JWT verification is off for this function (see config.toml); the
 // Stripe signature is checked instead.
 //
-// On success it keeps only: verified yes/no, the name on the license, the
-// date. Then it asks Stripe to redact the session, which deletes the license
-// images and the selfie. Set REDACT_AFTER_CHECK=false to keep them at Stripe.
+// On success it keeps: verified yes/no, the name on the license, the date,
+// and the live selfie as the person's profile photo (so every profile photo
+// has been matched to a real license). Then it asks Stripe to redact the
+// session, which deletes the license images, the selfie and the face scan at
+// Stripe. Set REDACT_AFTER_CHECK=false to keep them at Stripe.
 
 import { adminClient, cryptoProvider, stripe } from '../_shared/stripe.ts';
 
 const WEBHOOK_SECRET = Deno.env.get('STRIPE_IDENTITY_WEBHOOK_SECRET') ?? '';
 const REDACT = (Deno.env.get('REDACT_AFTER_CHECK') ?? 'true') !== 'false';
+// Restricted key with "Identity verification reports & selfie files: read". Stripe
+// only lets restricted keys download the selfie image.
+const FILES_KEY = Deno.env.get('STRIPE_IDENTITY_FILES_KEY') ?? '';
+
+/** Downloads the verified selfie from Stripe and stores it as the profile photo. */
+async function saveVerifiedSelfie(sessionId: string, userId: string) {
+  const full = await stripe.identity.verificationSessions.retrieve(sessionId, { expand: ['last_verification_report'] });
+  const report = full.last_verification_report as { selfie?: { selfie?: string | null } | null } | string | null;
+  const fileId = typeof report === 'object' ? report?.selfie?.selfie : null;
+  if (!fileId || !FILES_KEY) {
+    console.error('identity-webhook selfie: no file id or STRIPE_IDENTITY_FILES_KEY not set');
+    return false;
+  }
+  const res = await fetch(`https://files.stripe.com/v1/files/${fileId}/contents`, {
+    headers: { Authorization: `Bearer ${FILES_KEY}` },
+  });
+  if (!res.ok) {
+    console.error('identity-webhook selfie download', res.status, await res.text());
+    return false;
+  }
+  const type = res.headers.get('Content-Type') ?? 'image/jpeg';
+  const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+  // New random name each time, so an old cached photo never shows.
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const admin = adminClient();
+  const up = await admin.storage.from('avatars').upload(path, await res.arrayBuffer(), { contentType: type });
+  if (up.error) {
+    console.error('identity-webhook selfie upload', up.error);
+    return false;
+  }
+  const { data: result } = await admin.rpc('set_verified_avatar', { p_user_id: userId, p_session_id: sessionId, p_avatar_path: path });
+  // Remove older photos for this person.
+  const old = await admin.storage.from('avatars').list(userId);
+  const stale = (old.data ?? []).map((f) => `${userId}/${f.name}`).filter((p) => p !== path);
+  if (result === 'updated' && stale.length) await admin.storage.from('avatars').remove(stale);
+  return result === 'updated';
+}
 
 const STATUS_FOR_EVENT: Record<string, string> = {
   'identity.verification_session.verified': 'verified',
@@ -63,7 +102,17 @@ Deno.serve(async (req) => {
     return new Response('save failed', { status: 500 }); // Stripe retries
   }
 
-  if (REDACT && status === 'verified') {
+  // Save the selfie before redaction deletes it. If it fails, keep the images so it can be retried.
+  let selfieSaved = false;
+  if (status === 'verified') {
+    try {
+      selfieSaved = await saveVerifiedSelfie(session.id, userId);
+    } catch (e) {
+      console.error('identity-webhook selfie', e);
+    }
+  }
+
+  if (REDACT && status === 'verified' && selfieSaved) {
     try {
       await stripe.identity.verificationSessions.redact(session.id);
     } catch (e) {

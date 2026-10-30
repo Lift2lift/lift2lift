@@ -20,6 +20,9 @@ function RootStack() {
         <Stack.Screen name="post" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="account/index" />
         <Stack.Screen name="account/driver" />
+        <Stack.Screen name="profile/index" />
+        <Stack.Screen name="profile/setup" />
+        <Stack.Screen name="u" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />

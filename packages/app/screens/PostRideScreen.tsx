@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
+import { SetupModal } from '../components/SetupModal';
 import { Button, Chip, ChipRow, Field, FormScreen, Heading, Label, Notice } from '../components/ui';
 import { GEAR_OPTIONS, PICKUP_SPOTS } from '../lib/config';
 import { clockFromHHMM, dayLabel, driveText, nextDays, nextSaturday, toISO } from '../lib/dates';
@@ -38,17 +39,21 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // First time hosting? Drivers need license + insurance photos on file.
+  // First time hosting? Drivers need a finished profile and insurance on file.
   const [verification, setVerification] = useState<DriverVerification | null>(null);
+  const [profileReady, setProfileReady] = useState(false);
   const [verificationChecked, setVerificationChecked] = useState(false);
   useEffect(() => {
-    api
-      .getDriverVerification()
-      .then(setVerification)
+    if (!session) return;
+    Promise.all([api.getDriverVerification(), api.getProfile(session.userId)])
+      .then(([ver, prof]) => {
+        setVerification(ver);
+        setProfileReady(!!prof?.profileComplete);
+      })
       .catch(() => {})
       .finally(() => setVerificationChecked(true));
-  }, [api]);
-  const needsVerification = verificationChecked && !canHost(verification);
+  }, [api, session]);
+  const needsVerification = verificationChecked && (!profileReady || !canHost(verification));
 
   // Days this person already drives or rides (one ride per person per day).
   const [busyDays, setBusyDays] = useState<Set<string>>(new Set());
@@ -112,26 +117,7 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
 
   return (
     <FormScreen header={<AppHeader />}>
-      <Modal visible={needsVerification} transparent animationType="fade" onRequestClose={() => nav.back()}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(7,13,24,0.6)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <View
-            accessibilityViewIsModal
-            style={{ width: '100%', maxWidth: 420, backgroundColor: t.surface, borderRadius: 18, padding: 22, gap: 14 }}
-          >
-            <Text style={{ color: t.ink, fontSize: 24, fontWeight: '900' }}>Before your first ride</Text>
-            <Text style={{ color: t.muted, fontSize: 15, lineHeight: 22 }}>
-              Lift2Lift drivers verify their ID and add their insurance card. It takes about a minute, and you only do it once.
-            </Text>
-            <View style={{ gap: 6 }}>
-              <Text style={{ color: t.ink, fontSize: 15 }}>1. Scan your license and take a quick selfie</Text>
-              <Text style={{ color: t.ink, fontSize: 15 }}>2. Snap your insurance card</Text>
-              <Text style={{ color: t.ink, fontSize: 15 }}>3. Post your ride</Text>
-            </View>
-            <Button title="Get verified" onPress={() => nav.replace('/account/driver', { then: 'post' })} />
-            <Button title="Not now" variant="ghost" onPress={() => nav.back()} />
-          </View>
-        </View>
-      </Modal>
+      <SetupModal visible={needsVerification} role="driver" profileReady={profileReady} onClose={() => nav.back()} />
 
       <Heading title="Post a ride" subtitle="Riders see this on the board. Only people who claim a seat see how to reach you." />
 

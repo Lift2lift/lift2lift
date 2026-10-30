@@ -31,7 +31,41 @@ export type BoardRide = {
   riderNames: string[];
   rideDate: string; // YYYY-MM-DD, Mountain Time
   gasCap: number; // legal max for the whole trip, dollars
-  driverVerified: boolean; // license + insurance photos on file
+  driverVerified: boolean; // ID verified + insurance on file
+  driverAvatarUrl: string | null;
+  driverGender: Gender | null;
+  riderAvatarUrls: (string | null)[];
+  riderGenders: (Gender | null)[];
+};
+
+export type Gender = 'man' | 'woman' | 'nonbinary' | 'unspecified';
+export type PromptKey = 'go_to_run' | 'aux' | 'apres_spot' | 'off_mountain';
+
+/** Fields a person edits in profile setup. */
+export type ProfileFields = {
+  fullName: string;
+  gender: Gender | null;
+  discipline: 'ski' | 'snowboard' | 'both' | null;
+  homeResortId: string | null;
+  schoolYear: string;
+  hometown: string;
+  bio: string;
+  instagram: string;
+  interests: string[];
+  prompts: Partial<Record<PromptKey, string>>;
+};
+
+/** A profile page: fields plus the photo, badges, stats and upcoming rides. */
+export type ProfilePage = ProfileFields & {
+  id: string;
+  avatarUrl: string | null;
+  memberSince: string;
+  idVerified: boolean;
+  driverVerified: boolean;
+  profileComplete: boolean;
+  ridesDriven: number;
+  ridesTaken: number;
+  upcoming: { id: string; resortId: string; departAt: string; seatsTotal: number; seatsTaken: number }[];
 };
 
 /** Documents drivers upload themselves. (The license is scanned in the ID check.) */
@@ -124,6 +158,11 @@ export interface Api {
   leaveSeat(rideId: string): Promise<void>;
   removeRider(rideId: string, riderId: string): Promise<void>;
   rideContact(rideId: string): Promise<string | null>;
+
+  getProfile(userId: string): Promise<ProfilePage | null>;
+  updateProfile(fields: Partial<ProfileFields>): Promise<void>;
+  /** Marks setup finished. Returns what's still missing: 'photo' | 'name' | 'gender' | 'interests'. */
+  completeProfile(): Promise<string[]>;
 
   getDriverVerification(options?: { withPhotos?: boolean }): Promise<DriverVerification>;
   uploadDriverDoc(doc: DriverDoc, photo: PickedPhoto): Promise<DriverVerification>;

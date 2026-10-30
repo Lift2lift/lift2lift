@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, DriverVerification, Session } from './types';
+import type { Api, BoardRide, DriverVerification, Gender, ProfileFields, ProfilePage, Session } from './types';
 
 type BoardRow = {
   id: string;
@@ -20,7 +20,35 @@ type BoardRow = {
   ride_date: string;
   gas_cap: number;
   driver_verified: boolean;
+  driver_avatar_path: string | null;
+  driver_gender: Gender | null;
+  rider_avatar_paths: (string | null)[];
+  rider_genders: (Gender | null)[];
 };
+
+type ProfileRow = {
+  id: string;
+  full_name: string;
+  avatar_path: string | null;
+  gender: Gender | null;
+  bio: string;
+  instagram: string | null;
+  discipline: ProfileFields['discipline'];
+  home_resort_id: string | null;
+  school_year: string | null;
+  hometown: string | null;
+  interests: string[];
+  prompts: ProfileFields['prompts'];
+  member_since: string;
+  id_verified: boolean;
+  driver_verified: boolean;
+  profile_complete: boolean;
+  rides_driven: number;
+  rides_taken: number;
+  upcoming: { id: string; resort_id: string; depart_at: string; seats_total: number; seats_taken: number }[];
+};
+
+const AVATARS_BUCKET = 'avatars';
 
 type VerificationRow = {
   status: DriverVerification['status'];
@@ -36,7 +64,7 @@ type VerificationRow = {
 const DOCS_BUCKET = 'driver-docs';
 
 const BOARD_COLUMNS =
-  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified';
+  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders';
 
 function toSession(s: SupabaseSession | null): Session | null {
   if (!s) return null;
@@ -47,7 +75,7 @@ function toSession(s: SupabaseSession | null): Session | null {
   };
 }
 
-function toRide(r: BoardRow): BoardRide {
+function toRide(r: BoardRow, urls: Record<string, string>): BoardRide {
   return {
     id: r.id,
     driverId: r.driver_id,
@@ -65,6 +93,10 @@ function toRide(r: BoardRow): BoardRide {
     rideDate: r.ride_date,
     gasCap: r.gas_cap,
     driverVerified: !!r.driver_verified,
+    driverAvatarUrl: r.driver_avatar_path ? urls[r.driver_avatar_path] ?? null : null,
+    driverGender: r.driver_gender,
+    riderAvatarUrls: (r.rider_avatar_paths ?? []).map((p) => (p ? urls[p] ?? null : null)),
+    riderGenders: r.rider_genders ?? [],
   };
 }
 
@@ -83,6 +115,22 @@ export function createApi(supabase: SupabaseClient): Api {
   supabase.auth.onAuthStateChange((_event, session) => {
     if (!holdEvents) emit(toSession(session));
   });
+
+  // Profile photos are private: signed links, cached until shortly before they expire.
+  const urlCache = new Map<string, { url: string; until: number }>();
+  async function signAvatars(paths: (string | null | undefined)[]) {
+    const now = Date.now();
+    const need = [...new Set(paths.filter((p): p is string => !!p))].filter((p) => (urlCache.get(p)?.until ?? 0) < now);
+    if (need.length) {
+      const { data } = await supabase.storage.from(AVATARS_BUCKET).createSignedUrls(need, 3600);
+      for (const item of data ?? []) {
+        if (item.path && item.signedUrl) urlCache.set(item.path, { url: item.signedUrl, until: now + 50 * 60 * 1000 });
+      }
+    }
+    const out: Record<string, string> = {};
+    for (const p of paths) if (p && urlCache.has(p)) out[p] = urlCache.get(p)!.url;
+    return out;
+  }
 
   const api: Api = {
     async getSession() {
@@ -138,7 +186,9 @@ export function createApi(supabase: SupabaseClient): Api {
       const { data } = check(
         await supabase.from('ride_board').select(BOARD_COLUMNS).order('depart_at', { ascending: true }).limit(500),
       );
-      return ((data ?? []) as BoardRow[]).map(toRide);
+      const rows = (data ?? []) as BoardRow[];
+      const urls = await signAvatars(rows.flatMap((r) => [r.driver_avatar_path, ...(r.rider_avatar_paths ?? [])]));
+      return rows.map((r) => toRide(r, urls));
     },
     async postRide(ride) {
       check(
@@ -172,6 +222,72 @@ export function createApi(supabase: SupabaseClient): Api {
     async rideContact(rideId) {
       const { data } = check(await supabase.rpc('ride_contact', { p_ride_id: rideId }));
       return (data as string | null) ?? null;
+    },
+
+    async getProfile(userId) {
+      const { data } = check(await supabase.rpc('profile_page', { p_user_id: userId }));
+      const p = data as ProfileRow | null;
+      if (!p) return null;
+      const urls = await signAvatars([p.avatar_path]);
+      const page: ProfilePage = {
+        id: p.id,
+        fullName: p.full_name,
+        avatarUrl: p.avatar_path ? urls[p.avatar_path] ?? null : null,
+        gender: p.gender,
+        discipline: p.discipline,
+        homeResortId: p.home_resort_id,
+        schoolYear: p.school_year ?? '',
+        hometown: p.hometown ?? '',
+        bio: p.bio ?? '',
+        instagram: p.instagram ?? '',
+        interests: p.interests ?? [],
+        prompts: p.prompts ?? {},
+        memberSince: p.member_since,
+        idVerified: p.id_verified,
+        driverVerified: p.driver_verified,
+        profileComplete: p.profile_complete,
+        ridesDriven: p.rides_driven,
+        ridesTaken: p.rides_taken,
+        upcoming: (p.upcoming ?? []).map((u) => ({
+          id: u.id,
+          resortId: u.resort_id,
+          departAt: u.depart_at,
+          seatsTotal: u.seats_total,
+          seatsTaken: u.seats_taken,
+        })),
+      };
+      return page;
+    },
+    async updateProfile(f) {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (!uid) throw new Error('Sign in first.');
+      const row: Record<string, unknown> = {};
+      if (f.fullName !== undefined) row.full_name = f.fullName.trim().slice(0, 80);
+      if (f.gender !== undefined) row.gender = f.gender;
+      if (f.discipline !== undefined) row.discipline = f.discipline;
+      if (f.homeResortId !== undefined) row.home_resort_id = f.homeResortId;
+      if (f.schoolYear !== undefined) row.school_year = f.schoolYear.trim().slice(0, 40) || null;
+      if (f.hometown !== undefined) row.hometown = f.hometown.trim().slice(0, 60) || null;
+      if (f.bio !== undefined) row.bio = f.bio.trim().slice(0, 300);
+      if (f.instagram !== undefined) row.instagram = f.instagram.trim().replace(/^@/, '').toLowerCase() || null;
+      if (f.interests !== undefined) row.interests = f.interests;
+      if (f.prompts !== undefined) {
+        row.prompts = Object.fromEntries(
+          Object.entries(f.prompts)
+            .map(([k, v]) => [k, (v ?? '').trim().slice(0, 140)])
+            .filter(([, v]) => v),
+        );
+      }
+      const res = await supabase.from('profiles').update(row).eq('id', uid);
+      if (res.error) {
+        if (res.error.message.includes('instagram')) throw new Error('That Instagram handle has characters Instagram doesn’t allow. Use letters, numbers, dots and underscores.');
+        throw new Error(friendlyError(res.error));
+      }
+    },
+    async completeProfile() {
+      const { data } = check(await supabase.rpc('complete_profile'));
+      return (data as string[]) ?? [];
     },
 
     async getDriverVerification(options) {

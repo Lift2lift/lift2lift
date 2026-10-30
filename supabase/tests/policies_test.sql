@@ -7,8 +7,9 @@
 -- A third account signs up through the trigger.
 insert into auth.users (id, email, raw_user_meta_data)
 values ('33333333-3333-4333-8333-333333333333', 'new@lift2lift.test', '{"full_name":"  New Student  "}');
--- This student has uploaded license + insurance photos (see verification_test.sql for that flow).
+-- This student has finished setup and has insurance on file (see verification_test.sql for those flows).
 insert into public.driver_verifications (user_id, status) values ('33333333-3333-4333-8333-333333333333', 'submitted');
+select public.test_make_ready('33333333-3333-4333-8333-333333333333');
 
 do $$ begin
   assert (select full_name from public.profiles where id = '33333333-3333-4333-8333-333333333333') = 'New Student',

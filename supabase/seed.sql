@@ -38,9 +38,29 @@ begin
     );
   end loop;
 
-  -- The demo driver's license and insurance were "reviewed" so they can host.
-  insert into public.driver_verifications (user_id, status, submitted_at, reviewed_at)
-  values (v_driver, 'approved', now(), now());
+  -- Both demo accounts have finished profiles and a verified ID. The demo
+  -- driver's insurance was "reviewed" so they can host.
+  insert into public.driver_verifications (user_id, status, identity_status, identity_verified_at, submitted_at, reviewed_at)
+  values (v_driver, 'approved', 'verified', now(), now(), now()),
+         (v_rider, 'incomplete', 'verified', now(), null, null);
+
+  update public.profiles set
+    gender = 'woman', discipline = 'ski', home_resort_id = 'abasin', school_year = 'Junior · Environmental Studies',
+    hometown = 'Durango, CO', instagram = 'lift2lift.demo',
+    bio = 'Sample profile. Early starts, good snacks, and I always know where the parking is.',
+    interests = '{skiing,backcountry,powder,coffee,photography}',
+    prompts = '{"go_to_run": "Pallavicini when it''s filled in", "aux": "Khruangbin and old Phish", "apres_spot": "The 6th Alley Bar", "off_mountain": "Climbing at Movement or on Flagstaff"}',
+    profile_completed_at = now()
+  where id = v_driver;
+
+  update public.profiles set
+    gender = 'man', discipline = 'snowboard', home_resort_id = 'eldora', school_year = 'Sophomore · Computer Science',
+    hometown = 'Minneapolis, MN', bio = 'Sample profile. Happy to split gas and bring coffee.',
+    interests = '{snowboarding,park,music,gaming}', profile_completed_at = now()
+  where id = v_rider;
+
+  -- Placeholder photo paths (no image files locally; the app shows initials).
+  update public.profiles set avatar_path = id::text || '/demo.jpg' where id in (v_driver, v_rider);
 
   -- Sample rides, dated relative to today (Mountain Time) so they always show as upcoming.
   insert into public.rides (driver_id, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, contact) values

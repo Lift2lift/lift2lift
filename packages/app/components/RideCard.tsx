@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Platform, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { clock, driveText, DOW, isoDay, MON } from '../lib/dates';
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID } from '../lib/resorts';
 import { bookingClosed } from '../lib/rules';
+import { Avatar } from './Avatar';
 import { useTheme } from '../lib/theme';
 import type { BoardRide, Forecast } from '../lib/types';
-import { useApi, useAuth } from '../providers';
+import { useApi, useAuth, useNav } from '../providers';
 import { Button, Card, TextLink } from './ui';
 
 export function RideCard({
@@ -15,8 +16,13 @@ export function RideCard({
   onChanged,
   onMessage,
   busyDays,
+  profileReady,
+  onNeedsSetup,
 }: {
   ride: BoardRide;
+  /** Viewer has finished their profile (needed to call shotgun). */
+  profileReady: boolean;
+  onNeedsSetup: () => void;
   /** Days (YYYY-MM-DD) the viewer already drives or rides: one ride per person per day. */
   busyDays: Set<string>;
   forecast: Forecast | null;
@@ -25,6 +31,7 @@ export function RideCard({
 }) {
   const t = useTheme();
   const api = useApi();
+  const nav = useNav();
   const { session } = useAuth();
   const me = session?.userId;
   const [busy, setBusy] = useState(false);
@@ -98,7 +105,7 @@ export function RideCard({
         title={left === 0 ? 'Full' : closed ? 'Booking closed' : busyThatDay ? 'Booked that day' : 'Call shotgun'}
         disabled={blocked}
         loading={busy}
-        onPress={() => run(() => api.claimSeat(ride.id), `Seat saved. Text ${ride.driverName.split(' ')[0] || 'the driver'} to confirm pickup.`)}
+        onPress={() => (!profileReady ? onNeedsSetup() : run(() => api.claimSeat(ride.id), `Seat saved. Text ${ride.driverName.split(' ')[0] || 'the driver'} to confirm pickup.`))}
       />
     );
   }
@@ -185,8 +192,15 @@ export function RideCard({
             <Text style={{ color: t.muted, fontSize: 13 }}>Riding with you:</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {ride.riderNames.map((name, i) => (
-                <View key={ride.riderIds[i]} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.chip, borderRadius: 999, paddingLeft: 10, paddingRight: 6, paddingVertical: 3 }}>
-                  <Text style={{ color: t.ink, fontSize: 13, fontWeight: '600' }}>{name || 'Rider'}</Text>
+                <View key={ride.riderIds[i]} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.chip, borderRadius: 999, paddingLeft: 3, paddingRight: 6, paddingVertical: 3 }}>
+                  <Avatar uri={ride.riderAvatarUrls[i]} name={name} gender={ride.riderGenders[i]} size={26} />
+                  <Text
+                    onPress={() => nav.push('/u', { id: ride.riderIds[i] })}
+                    accessibilityRole="link"
+                    style={{ color: t.ink, fontSize: 13, fontWeight: '600' }}
+                  >
+                    {name || 'Rider'}
+                  </Text>
                   <Text
                     onPress={() => run(() => api.removeRider(ride.id, ride.riderIds[i]), `${name || 'Rider'} removed from your ride.`)}
                     accessibilityRole="button"
@@ -214,9 +228,18 @@ export function RideCard({
             marginTop: 2,
           }}
         >
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flexShrink: 1 }}>
+          <Pressable onPress={() => nav.push('/u', { id: ride.driverId })} accessibilityRole="link" accessibilityLabel={`${ride.driverName}'s profile`}>
+            <Avatar uri={ride.driverAvatarUrl} name={ride.driverName} gender={ride.driverGender} size={44} />
+          </Pressable>
           <View style={{ gap: 4, flexShrink: 1 }}>
             <Text style={{ color: t.muted, fontSize: 13 }}>
-              {mine ? "You're driving" : `Driver: ${ride.driverName || 'A student'}`}
+              {mine ? "You're driving" : 'Driver: '}
+              {mine ? null : (
+                <Text onPress={() => nav.push('/u', { id: ride.driverId })} accessibilityRole="link" style={{ color: t.ink, fontWeight: '700' }}>
+                  {ride.driverName || 'A student'}
+                </Text>
+              )}
             </Text>
             {ride.driverVerified ? (
               <Text style={{ color: t.ok, fontSize: 12, fontWeight: '700' }}>✓ ID verified · insurance on file</Text>
@@ -229,6 +252,7 @@ export function RideCard({
               ) : (
                 <TextLink onPress={showContact}>{mine ? 'Show my contact' : "Show driver's contact"}</TextLink>
               ))}
+          </View>
           </View>
           {action}
         </View>

@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
   const origin = req.headers.get('Origin') ?? '';
   const returnUrl =
     body.platform === 'web' && isAllowedOrigin(origin)
-      ? `${origin}/account/driver?verify=done`
+      ? `${origin}/profile/setup?verify=done`
       : `${SITE_URL}/verified`; // iOS: a simple "you're done, head back to the app" page
 
   try {

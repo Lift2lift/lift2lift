@@ -10,4 +10,8 @@ export { RideBoardScreen } from './screens/RideBoardScreen';
 export { SnowScreen } from './screens/SnowScreen';
 export { PostRideScreen } from './screens/PostRideScreen';
 export { AccountScreen, DriverVerificationScreen, IdCheckDoneScreen } from './screens/AccountScreens';
+export { ProfileScreen } from './screens/ProfileScreen';
+export { ProfileSetupScreen } from './screens/ProfileSetupScreen';
+export { Avatar, RING } from './components/Avatar';
+export * from './lib/interests';
 export { Loading } from './components/ui';

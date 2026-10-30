@@ -30,6 +30,12 @@ supabase/
 - **Call shotgun**: claim a seat, bail on a seat. Drivers see who's riding, can remove riders and can cancel the ride.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders who claimed a seat.
 - **Post a ride**: tap-to-pick mountain, day, time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
+- **Profiles**: the first time someone posts a ride or calls shotgun, a pop-up starts profile setup:
+  1. **Photo**: scan their license and take a live selfie (Stripe Identity). The selfie is matched to the license photo and becomes their profile photo. People can't upload their own profile photo, so every photo is verified.
+  2. **About you**: name, gender (shown as a ring around the photo: blue for men, pink for women, neutral for nonbinary or "prefer not to say"), ski or snowboard, home mountain, year and major, hometown, bio, Instagram, and four optional quick prompts.
+  3. **Interests**: Instagram-style chip picker in four groups, at least 3 and up to 12.
+
+  Profile pages follow CorePower's teacher pages: big photo, name and home mountain, Instagram link, stats, upcoming rides, About, Q&A, interests and verified badges. Tap any driver or rider on a ride card to open theirs.
 - **Driver verification**: the first time someone taps **Post a ride**, a pop-up sends them to **Account → Driver verification** for two steps:
   1. **ID check with a selfie** (Stripe Identity): scan the license, take a live selfie, and Stripe confirms the license is real and the face matches its photo. Lift2Lift never receives the selfie or face scan, and the server asks Stripe to delete the images right after a successful check.
   2. **Insurance card photo**, stored privately.
@@ -181,7 +187,8 @@ The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, s
 psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/20261029000001_init.sql \
   -f supabase/migrations/20261029000002_colorado_carpool_rules.sql \
   -f supabase/migrations/20261029000003_cu_email_and_driver_verification.sql \
-  -f supabase/migrations/20261029000004_identity_selfie_check.sql -f supabase/seed.sql \
+  -f supabase/migrations/20261029000004_identity_selfie_check.sql -f supabase/migrations/20261030000005_profiles.sql \
+  -f supabase/seed.sql -f supabase/tests/helpers.sql \
   -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql
 ```
 

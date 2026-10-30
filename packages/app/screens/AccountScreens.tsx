@@ -3,7 +3,6 @@ import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Brand, Button, Card, FormScreen, Heading, Label, Loading, Muted, Notice } from '../components/ui';
 import { SCHOOL_NAME } from '../lib/config';
-import { BIOMETRIC_CONSENT, identityErrorMessage } from '../lib/identity';
 import { useTheme } from '../lib/theme';
 import { canHost, type DriverVerification } from '../lib/types';
 import { useApi, useAuth, useDevice, useNav } from '../providers';
@@ -89,13 +88,26 @@ export function AccountScreen() {
         <Label>Settings</Label>
         <Card>
           <Pressable
+            onPress={() => nav.push('/profile')}
+            accessibilityRole="button"
+            style={({ pressed }) => ({ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: pressed ? 0.8 : 1 })}
+          >
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={{ color: t.ink, fontSize: 16, fontWeight: '700' }}>Profile</Text>
+              <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>Photo, bio, interests and Instagram. What riders and drivers see.</Text>
+            </View>
+            <Text style={{ color: t.muted, fontSize: 22 }}>›</Text>
+          </Pressable>
+        </Card>
+        <Card>
+          <Pressable
             onPress={() => nav.push('/account/driver')}
             accessibilityRole="button"
             style={({ pressed }) => ({ padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: pressed ? 0.8 : 1 })}
           >
             <View style={{ flex: 1, gap: 6 }}>
               <Text style={{ color: t.ink, fontSize: 16, fontWeight: '700' }}>Driver verification</Text>
-              <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>ID check with a selfie, plus your insurance card. Needed to host rides.</Text>
+              <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>Verified profile plus your insurance card. Needed to host rides.</Text>
               <StatusPill v={verification} />
             </View>
             <Text style={{ color: t.muted, fontSize: 22 }}>›</Text>
@@ -129,7 +141,6 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
   const [v, setV] = useState<DriverVerification | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [starting, setStarting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [polling, setPolling] = useState(!!verifyDone);
@@ -167,24 +178,6 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
     return () => clearInterval(id);
   }, [polling, load]);
 
-  async function startIdCheck() {
-    setError(null);
-    setStarting(true);
-    try {
-      if (!v?.consented) await api.giveBiometricConsent();
-      const res = await api.startIdentityCheck(device.platform);
-      if (res.url) {
-        await device.openIdentityCheck(res.url); // web leaves the page here; iOS comes back when the browser closes
-      }
-      setPolling(true);
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setStarting(false);
-    }
-  }
-
   async function addInsurance() {
     setError(null);
     try {
@@ -202,11 +195,10 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
 
   const ready = canHost(v);
   const idDone = v?.identity === 'verified';
-  const idBusy = polling || v?.identity === 'processing';
 
   return (
     <FormScreen header={<AppHeader />}>
-      <Heading title="Driver verification" subtitle="Two quick steps, about a minute total. You can host as soon as both are done." />
+      <Heading title="Driver verification" subtitle="A verified profile plus your insurance card. You can host as soon as both are done." />
 
       {loadError ? (
         <View style={{ gap: 10 }}>
@@ -220,50 +212,19 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
           <StatusPill v={v} />
           {v.status === 'rejected' && v.reviewNote ? <Notice kind="error">{`${v.reviewNote} Fix it below to resubmit.`}</Notice> : null}
 
-          {/* Step 1: ID + selfie */}
+          {/* Step 1: verified profile (selfie matched to license) */}
           <Card style={{ padding: 16, gap: 12 }}>
-            <StepHeader n={1} title="Verify your ID with a selfie" done={idDone} />
+            <StepHeader n={1} title="Verified profile" done={idDone} />
             {idDone ? (
               <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>
-                Your license is real and your selfie matches it.{v.idName ? ` Name on license: ${v.idName}.` : ''}
+                Your license is real and your profile photo matches it.{v.idName ? ` Name on license: ${v.idName}.` : ''}
               </Text>
-            ) : idBusy ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <ActivityIndicator color={t.ink} />
-                <Text style={{ color: t.muted, fontSize: 14, flex: 1 }}>Checking your ID. This usually takes under a minute.</Text>
-              </View>
             ) : (
               <>
                 <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>
-                  Scan the front and back of your driver's license, then take a quick selfie. Stripe checks that the license is real and that your
-                  face matches its photo.
+                  Set up your profile with a selfie and your license scan. The selfie becomes your profile photo.
                 </Text>
-                {v.identity === 'requires_input' ? <Notice kind="error">{identityErrorMessage(v.identityError)}</Notice> : null}
-                {!v.consented ? (
-                  <View style={{ backgroundColor: t.chip, borderRadius: 12, padding: 12 }}>
-                    <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>{BIOMETRIC_CONSENT}</Text>
-                  </View>
-                ) : null}
-                <Button
-                  title={
-                    !v.consented
-                      ? 'Agree and start ID check'
-                      : v.identity === 'pending'
-                        ? 'Finish your ID check'
-                        : v.identity === 'requires_input'
-                          ? 'Try again'
-                          : 'Start ID check'
-                  }
-                  loading={starting}
-                  onPress={startIdCheck}
-                />
-                {v.identity === 'pending' ? (
-                  <Text style={{ textAlign: 'center' }}>
-                    <Text onPress={() => setPolling(true)} accessibilityRole="button" style={{ color: t.link, fontWeight: '600', fontSize: 14 }}>
-                      Already finished? Check again
-                    </Text>
-                  </Text>
-                ) : null}
+                <Button title="Set up my profile" onPress={() => nav.push('/profile/setup', { then: 'driver' })} />
               </>
             )}
           </Card>
