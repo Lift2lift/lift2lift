@@ -15,18 +15,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../lib/theme';
+import { TabBar } from './TabBar';
 
 /** Centered, keyboard-aware column for forms (sign-in, post a ride). */
 export function FormScreen({ children, header }: { children: ReactNode; header?: ReactNode }) {
   const t = useTheme();
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: t.bg }]} edges={header ? ['bottom', 'left', 'right'] : undefined}>
+    <SafeAreaView style={[styles.flex, { backgroundColor: t.bg }]} edges={header ? ['left', 'right'] : undefined}>
       {header}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, !header && styles.centered]} keyboardShouldPersistTaps="handled">
           <View style={styles.column}>{children}</View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {header ? <TabBar /> : null}
     </SafeAreaView>
   );
 }

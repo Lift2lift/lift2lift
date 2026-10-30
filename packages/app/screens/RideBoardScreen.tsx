@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
+import { TabBar } from '../components/TabBar';
 import { RideCard } from '../components/RideCard';
 import { SetupModal } from '../components/SetupModal';
 import { Button, Chip, ChipRow, Loading, Notice } from '../components/ui';
@@ -330,6 +331,7 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
           </View>
         </View>
       </ScrollView>
+      <TabBar />
     </View>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi, useAuth, useNav, type Route } from '../providers';
+import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
 
 const TABS: { route: Route; label: string }[] = [
@@ -16,6 +17,7 @@ export function AppHeader() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
+  const compact = useCompact(); // phone layout: tabs and Post move to the bottom tab bar
   const first = (session?.name || session?.email || '').split(/[ @]/)[0];
 
   return (
@@ -34,11 +36,12 @@ export function AppHeader() {
         }}
       >
         <Pressable onPress={() => nav.replace('/')} accessibilityRole="link" accessibilityLabel="Lift2Lift home">
-          <Text style={{ color: t.headerInk, fontSize: 28, fontWeight: '900', fontStyle: 'italic', letterSpacing: 1 }}>
+          <Text style={{ color: t.headerInk, fontSize: compact ? 24 : 28, fontWeight: '900', fontStyle: 'italic', letterSpacing: 1 }}>
             LIFT<Text style={{ color: t.accent }}>2</Text>LIFT
           </Text>
         </Pressable>
 
+        {compact ? null : (
         <View style={{ flexDirection: 'row', gap: 4, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 4 }}>
           {TABS.map((tab) => {
             const active = nav.current === tab.route;
@@ -55,9 +58,11 @@ export function AppHeader() {
             );
           })}
         </View>
+        )}
 
         <View style={{ flex: 1 }} />
 
+        {compact ? null : (
         <Pressable
           onPress={() => nav.push('/post')}
           accessibilityRole="button"
@@ -71,6 +76,7 @@ export function AppHeader() {
         >
           <Text style={{ color: t.accentInk, fontWeight: '800', fontSize: 14 }}>+ Post a ride</Text>
         </Pressable>
+        )}
 
         <Pressable
           onPress={() => setMenuOpen((o) => !o)}

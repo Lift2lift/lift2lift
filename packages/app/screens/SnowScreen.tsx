@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
+import { TabBar } from '../components/TabBar';
 import { Card, Chip, Loading, Notice } from '../components/ui';
 import { DOW, driveText, isoDay, longDay, parseDay } from '../lib/dates';
 import { RESORTS } from '../lib/resorts';
@@ -154,6 +155,7 @@ export function SnowScreen() {
           ) : null}
         </View>
       </ScrollView>
+      <TabBar />
     </View>
   );
 }
