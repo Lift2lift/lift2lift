@@ -17,10 +17,13 @@ export function RideCard({
   onChanged,
   onMessage,
   busyDays,
+  hideResort,
   profileReady,
   onNeedsSetup,
 }: {
   ride: BoardRide;
+  /** On a mountain's own page, the card doesn't repeat the mountain name. */
+  hideResort?: boolean;
   /** Viewer has finished their profile (needed to call shotgun). */
   profileReady: boolean;
   onNeedsSetup: () => void;
@@ -133,9 +136,13 @@ export function RideCard({
 
       <View style={{ flex: 1, padding: 14, gap: 8, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-          <Text style={{ color: t.ink, fontSize: 22, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1 }}>
+          {hideResort ? (
+            <Text style={{ color: t.ink, fontSize: 18, fontWeight: '900', flexShrink: 1 }}>Leaves {clock(ride.departAt)}</Text>
+          ) : (
+            <Text style={{ color: t.ink, fontSize: 22, fontWeight: '900', textTransform: 'uppercase', flexShrink: 1 }}>
             {resort?.name ?? ride.resortId}
           </Text>
+          )}
           <View style={{ backgroundColor: t.chip, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
             <Text style={{ color: t.ink, fontSize: 13, fontWeight: '800' }}>
               {ride.gasPerRider > 0 ? `$${ride.gasPerRider} gas` : 'Free ride'}
@@ -143,11 +150,17 @@ export function RideCard({
           </View>
         </View>
 
-        <Text style={{ color: t.muted, fontSize: 14 }}>
+        {hideResort ? (
+          <Text style={{ color: t.muted, fontSize: 14 }}>
+            From <Text style={{ color: t.ink, fontWeight: '700' }}>{ride.leaveFrom}</Text>
+          </Text>
+        ) : (
+          <Text style={{ color: t.muted, fontSize: 14 }}>
           Leaves <Text style={{ color: t.ink, fontWeight: '700' }}>{clock(ride.departAt)}</Text> from{' '}
           <Text style={{ color: t.ink, fontWeight: '700' }}>{ride.leaveFrom}</Text>
           {resort ? ` · ${driveText(resort.driveMinutes)} drive` : ''}
         </Text>
+        )}
 
         <WeatherChip wx={wx} />
 

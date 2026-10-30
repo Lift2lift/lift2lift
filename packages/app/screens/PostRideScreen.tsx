@@ -108,7 +108,7 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
         notes: notes.trim().slice(0, 280),
         contact: contact.trim().slice(0, 60),
       });
-      nav.replace('/', { day });
+      nav.replace('/', { resort: resortId, day });
     } catch (e) {
       setError((e as Error).message);
       setSaving(false);

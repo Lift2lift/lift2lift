@@ -26,7 +26,7 @@ supabase/
 
 - **CU Boulder only**: every account needs a @colorado.edu email (department subdomains like @cs.colorado.edu work too), confirmed with a 6-digit code sent to that inbox. The database rejects any other address, including on email changes.
 - **Accounts**: sign up with name, email and password, confirmed by a 6-digit emailed code. Sign in, sign out, forgot password (code + new password). Sessions persist on web and iPhone.
-- **Ride board**: upcoming rides filtered by day, mountain and open seats. Each ride card shows departure time, pickup spot, gas money, gear space, a seat map and that day's forecast for the mountain.
+- **Ride board, in two steps**: the landing page asks "Where are you headed?" and lists only the mountains with rides on the chosen day, each showing its ride count, open seats and new snow. Mountains with no rides are tucked behind a "Show … mountains with no rides yet" link, and "Your rides" sits on top. Tap a mountain to see its rides: ticket cards with departure time, pickup spot, gas money, gear space, a seat map and that day's forecast. The day buttons stay on both screens, and "Open seats only" sits on the mountain page.
 - **Call shotgun**: claim a seat, bail on a seat. Drivers see who's riding, can remove riders and can cancel the ride.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders who claimed a seat.
 - **Post a ride**: tap-to-pick mountain, day, time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
