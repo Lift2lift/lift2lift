@@ -26,9 +26,16 @@ supabase/
 
 - **CU Boulder only**: every account needs a @colorado.edu email (department subdomains like @cs.colorado.edu work too), confirmed with a 6-digit code sent to that inbox. The database rejects any other address, including on email changes.
 - **Accounts**: sign up with name, email and password, confirmed by a 6-digit emailed code. Sign in, sign out, forgot password (code + new password). Sessions persist on web and iPhone.
-- **Phone layout**: on iPhone (and on the web below 640px) the top bar shrinks to the wordmark and account button, and a bottom tab bar holds Rides, Snow, Post and Profile (`components/TabBar.tsx`, `lib/layout.ts`).
+- **Phone layout**: on iPhone (and on the web below 640px) the top bar shrinks to the wordmark and account button, and a bottom tab bar holds Rides, Your Rides, Post, Snow and Profile (`components/TabBar.tsx`, `lib/layout.ts`).
 - **Ride board, in two steps**: the landing page asks "Where are you headed?" and lists only the mountains with rides on the chosen day, each showing its ride count, open seats and new snow. Mountains with no rides are tucked behind a "Show … mountains with no rides yet" link, and "Your rides" sits on top. Tap a mountain to see its rides: ticket cards with departure time, pickup spot, gas money, gear space, a seat map and that day's forecast. The day buttons stay on both screens, and "Open seats only" sits on the mountain page.
-- **Call shotgun**: claim a seat, bail on a seat. Drivers see who's riding, can remove riders and can cancel the ride.
+- **Round trip or one way**: drivers post a **round trip** (up in the morning, a set time and meeting spot for the ride back), **one way up**, or **one way down**. One-way trips have half the legal gas cap. The mountain page filters by **↑ Rides up** and **↓ Rides down**.
+- **Call shotgun**: on a round trip, pick **Round trip**, **Just the ride up** or **Just the ride down** (a one-way seat pays half the gas, rounded down). Booking only one way brings up **“Have a ride back from the mountain?”** with **Confirm one way**, **Make it a round trip** and **Find a ride back** (which opens that mountain's rides down the same day). Booking only the ride down asks “Have a ride up to the mountain?”. People can combine one ride up and a different ride down on the same day, but never two seats on the same leg. Bail on a seat any time. Drivers see who's riding, can remove riders and can cancel the ride.
+- **Your Rides**: a tab with every trip you're driving or riding, the next leg up top with a live countdown.
+  - **2 hours before each leg** (up and down), everyone on that leg gets a push: “Leaving in 2 hours · Up to Eldora at 7:40 AM from Williams Village. Tap for the countdown and chat.”
+  - **30 minutes before**, opening the app goes straight to **Your Ride** and stays there (no tab bar) until 15 minutes after departure or until check-in is done. “Can't make it?” is always available.
+  - **Ride chat**: driver and riders message each other live (Supabase Realtime), with quick replies like “On my way” and “Where are you parked?”. Only people on the ride can read it.
+  - **5 minutes before**, passengers get **“Confirm your ride”** and tap “I'm here, confirm my seat”; the driver gets **“Confirm your passengers”** and marks each one **Picked up** or **No-show**.
+  - The same reminders and lock-in happen again for the ride down.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders who claimed a seat.
 - **Post a ride**: tap-to-pick mountain, day, time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
 - **Profiles**: the first time someone posts a ride or calls shotgun, a pop-up starts profile setup:
@@ -161,6 +168,30 @@ npm run db:push     # applies supabase/migrations to the hosted database
 2. **Authentication → Emails → SMTP**: add a real email provider (Resend, Postmark). The built-in sender only allows a few emails an hour.
 3. **Project Settings → API Keys**: copy the anon / publishable key into each app's env, with URL `https://vpkxesucfaofwazqgpni.supabase.co`.
 
+**Ride reminders (push notifications)**
+
+The reminders are sent by `supabase/functions/send-ride-reminders`, run every minute. It calls `claim_due_notifications()`, which returns each due reminder once (so a cancelled seat or ride never gets one), and sends them through Expo's push service.
+
+```bash
+npx supabase secrets set CRON_SECRET=$(openssl rand -hex 24) EXPO_ACCESS_TOKEN=...   # token from expo.dev → Access tokens
+npx supabase functions deploy send-ride-reminders --no-verify-jwt
+```
+
+Then in the SQL editor (enable the **pg_cron** and **pg_net** extensions first):
+
+```sql
+select cron.schedule('send-ride-reminders', '* * * * *', $$
+  select net.http_post(
+    url := 'https://aqoqfsesceiykkoahnej.supabase.co/functions/v1/send-ride-reminders',
+    headers := jsonb_build_object('Authorization', 'Bearer <your CRON_SECRET>')
+  );
+$$);
+```
+
+The iPhone app asks to allow notifications the first time someone has a booked ride. Pushes need a real device and an EAS build with a push key (`eas credentials`); they don't arrive in the iOS Simulator.
+
+**Lock-screen countdown**: a regular push shows a fixed message (“Leaving in 2 hours … at 7:40 AM”). A countdown that ticks on the lock screen is an iOS **Live Activity**, which needs a native widget extension (for example with `expo-apple-targets`) and a development build, so it won't run in Expo Go. The countdown inside the app works today. Live Activities are the next step if you want it on the lock screen too.
+
 **Website**: deploy `apps/web` to Vercel (root directory `apps/web`) and add the two `NEXT_PUBLIC_` env vars.
 
 **iPhone**: `npm i -g eas-cli`, then from `apps/mobile`: `eas build -p ios` and `eas submit -p ios`. This needs an Apple Developer account ($99/year).
@@ -175,9 +206,15 @@ npm run db:push     # applies supabase/migrations to the hosted database
 | `gas_cap_dollars(resort, depart_at)` | The legal gas cap for a trip | Anyone |
 | `rides` | A posted trip. A trigger enforces the gas cap, 6 seats, 2-hour lead time and one ride per person per day | Signed-in users read (except `contact`); drivers create, edit and cancel their own |
 | `ride_seats` | Who has a seat on which ride | Signed-in users read; riders leave, drivers remove riders |
-| `claim_seat(ride)` | The only way to take a seat. Locks the ride row, so two people can't grab the last seat. Also enforces the 2-hour booking window and one ride per person per day | Signed-in users |
+| `claim_seat(ride, legs)` | The only way to take a seat (`legs`: both, to or from on round trips). Locks the ride row, so two people can't grab the last seat on a leg. Also enforces a finished profile, the 2-hour booking window and one seat per leg per day | Signed-in users |
 | `ride_contact(ride)` | Returns the driver's contact to the driver and seated riders only | Signed-in users |
-| `ride_board` view | Upcoming rides with driver name, seat count, rider names, gas cap and the driver's verified badge | Signed-in users |
+| `ride_board` view | Upcoming rides with driver name, trip type, return time and spot, seats taken per leg, riders and their legs, gas cap and the driver's verified badge | Signed-in users |
+| `rides.trip_type` / `return_at` / `return_meet` | round_trip, to_mountain or from_mountain; round trips have a return time 30 min–20 h after leaving | Drivers set; can't change trip type once seats are booked |
+| `my_trips()` | Your Rides: each trip I drive or ride, with my legs, the driver, passengers and their legs, contact and check-ins | Signed-in users (own trips only) |
+| `ride_messages` | Ride chat, in the Realtime publication | Only the driver and riders on that ride read and post |
+| `ride_checkins` / `confirm_my_seat()` / `confirm_passenger()` | Per leg: rider says they're here, driver marks picked up or no-show. Opens 30 minutes before the leg | Riders confirm themselves; drivers mark their passengers |
+| `push_tokens` / `register_push_token()` | Expo push tokens per device | Each person registers their own |
+| `claim_due_notifications()` | 2-hour and 5-minute reminders that are due, each returned once | `send-ride-reminders` edge function only |
 | `allowed_email_domains` | Email domains that can sign up (`colorado.edu`). A trigger on `auth.users` rejects everything else | Anyone reads |
 | `reviews` | One per reviewer, per person, per ride: role, driving (drivers only), experience, optional text | Signed-in users read; written only through `submit_review()` |
 | `submit_review()` | Checks the reviewer was a passenger, the ride has left and is under 14 days old, the reviewee was on it, and the ratings are half stars | Signed-in users |
@@ -190,17 +227,17 @@ npm run db:push     # applies supabase/migrations to the hosted database
 | `identity-start` edge function | Starts or resumes a Stripe check (license only, live capture, matching selfie) | Signed-in users |
 | `identity-webhook` edge function | Verifies Stripe's signature, saves the result, redacts images | Stripe |
 
-The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), consent, photo privacy, face mismatch then retry, stale Stripe events, no self-approval, rejection and resubmission. To run them against plain Postgres:
+The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), consent, photo privacy, face mismatch then retry, stale Stripe events, no self-approval, rejection and resubmission. `trips_test.sql` covers round-trip and one-way gas caps, booking legs (one up plus a different one down is fine, two on the same leg isn't), per-leg seat limits, chat privacy, check-in windows and permissions, and that each reminder is sent once. To run them against plain Postgres:
 
 ```bash
 psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/20261029000001_init.sql \
   -f supabase/migrations/20261029000002_colorado_carpool_rules.sql \
   -f supabase/migrations/20261029000003_cu_email_and_driver_verification.sql \
   -f supabase/migrations/20261029000004_identity_selfie_check.sql -f supabase/migrations/20261030000005_profiles.sql \
-  -f supabase/migrations/20261030000006_reviews.sql \
+  -f supabase/migrations/20261030000006_reviews.sql -f supabase/migrations/20261030000007_trips_your_rides.sql \
   -f supabase/seed.sql -f supabase/tests/helpers.sql \
   -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql \
-  -f supabase/tests/reviews_test.sql
+  -f supabase/tests/reviews_test.sql -f supabase/tests/trips_test.sql
 ```
 
 ## Options

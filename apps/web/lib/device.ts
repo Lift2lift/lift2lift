@@ -8,6 +8,11 @@ export const webDevice: DeviceServices = {
   platform: 'web',
 
   /** Stripe's hosted ID check; it sends the person back to /account/driver?verify=done. */
+  /** Web has no lock-screen pushes; ride reminders show in the app's Your Rides tab instead. */
+  async registerForPush() {
+    return null;
+  },
+
   openIdentityCheck(url) {
     window.location.assign(url);
     return new Promise<void>(() => {}); // the page is leaving

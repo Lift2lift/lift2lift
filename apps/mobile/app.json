@@ -8,7 +8,12 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.zatzworks.lift2lift",
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "plugins": [
       "expo-router",
@@ -17,6 +22,12 @@
         {
           "photosPermission": "Lift2Lift uses your photos so you can upload your insurance card.",
           "cameraPermission": "Lift2Lift uses the camera so you can snap your insurance card."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "rides"
         }
       ]
     ]

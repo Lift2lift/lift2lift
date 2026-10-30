@@ -1,6 +1,9 @@
 import type { DeviceServices } from '@lift2lift/app';
 import { decode } from 'base64-arraybuffer';
+import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import * as ImagePicker from 'expo-image-picker';
+import * as Notifications from 'expo-notifications';
 import * as WebBrowser from 'expo-web-browser';
 import { ActionSheetIOS, Alert, Platform } from 'react-native';
 
@@ -21,8 +24,30 @@ function chooseSource(): Promise<'camera' | 'library' | null> {
   });
 }
 
+// Show ride reminders as banners even while the app is open.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+});
+
 export const nativeDevice: DeviceServices = {
   platform: 'ios',
+
+  /**
+   * Asks to send notifications and returns this phone's Expo push token. The
+   * server (supabase/functions/send-ride-reminders) sends the 2-hour and
+   * 5-minute ride reminders to it. Returns null on a simulator or if the person says no.
+   */
+  async registerForPush() {
+    if (!Device.isDevice) return null;
+    let { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      ({ status } = await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowSound: true, allowBadge: false } }));
+    }
+    if (status !== 'granted') return null;
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const { data } = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    return { token: data, platform: Platform.OS === 'android' ? 'android' : 'ios' };
+  },
 
   /** Stripe's hosted ID check in an in-app browser. Resolves when the person closes it. */
   async openIdentityCheck(url) {

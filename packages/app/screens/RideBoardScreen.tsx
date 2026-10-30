@@ -9,7 +9,8 @@ import { dayLabel, driveText, isoDay, longDay, nextDays } from '../lib/dates';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
-import type { BoardRide, PendingReview } from '../lib/types';
+import { seatLegs, seatsOpen, tripLegs } from '../lib/trips';
+import type { BoardRide, Leg, PendingReview } from '../lib/types';
 import { useForecast } from '../lib/useForecast';
 import { useApi, useAuth, useNav } from '../providers';
 
@@ -60,7 +61,7 @@ function MountainRow({ name, sub, rides, seats, snow, onPress }: { name: string;
   );
 }
 
-export function RideBoardScreen({ initialResort, initialDay }: { initialResort?: string; initialDay?: string }) {
+export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { initialResort?: string; initialDay?: string; initialLeg?: string }) {
   const t = useTheme();
   const api = useApi();
   const nav = useNav();
@@ -84,6 +85,8 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
   // No mountain picked = the mountain list. A mountain = that mountain's rides.
   const resort = initialResort && RESORT_BY_ID[initialResort] ? initialResort : null;
   const [openOnly, setOpenOnly] = useState(false);
+  // Looking for just the ride up or the ride down (e.g. after booking one way).
+  const [legFilter, setLegFilter] = useState<Leg | null>(initialLeg === 'to' || initialLeg === 'from' ? initialLeg : null);
   const [showEmpty, setShowEmpty] = useState(false);
 
   const load = useCallback(async () => {
@@ -110,12 +113,31 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
   const all = rides ?? [];
   const onDay = (r: BoardRide) => day === 'all' || isoDay(new Date(r.departAt)) === day;
   const isMine = (r: BoardRide) => r.driverId === me || (!!me && r.riderIds.includes(me));
-  const busyDays = useMemo(() => new Set(all.filter(isMine).map((r) => r.rideDate)), [rides, me]);
+  // Legs already covered each day. Driving takes the whole day; a seat takes the legs it covers.
+  const busyDays = useMemo(() => {
+    const m = new Map<string, Set<Leg>>();
+    for (const r of all) {
+      if (!me) continue;
+      let legs: Leg[] = [];
+      if (r.driverId === me) legs = ['to', 'from'];
+      else if (r.riderIds.includes(me)) legs = seatLegs(r.tripType, r.riderLegs[r.riderIds.indexOf(me)] ?? 'both');
+      if (!legs.length) continue;
+      const set = m.get(r.rideDate) ?? new Set<Leg>();
+      legs.forEach((l) => set.add(l));
+      m.set(r.rideDate, set);
+    }
+    return m;
+  }, [rides, me]);
   const seatsLeft = (rs: BoardRide[]) => rs.reduce((n, r) => n + Math.max(0, r.seatsTotal - r.seatsTaken), 0);
 
   // Mountain view
   const inResort = resort ? all.filter((r) => r.resortId === resort) : all;
-  const shown = inResort.filter((r) => onDay(r) && (!openOnly || r.seatsTaken < r.seatsTotal || isMine(r)));
+  const shown = inResort.filter(
+    (r) =>
+      onDay(r) &&
+      (!legFilter || tripLegs(r.tripType).includes(legFilter)) &&
+      (!openOnly || isMine(r) || (legFilter ? seatsOpen(r, legFilter) > 0 : r.seatsTaken < r.seatsTotal)),
+  );
 
   // Mountain list: counts for the selected day
   const byResort = RESORTS.map((m) => {
@@ -298,7 +320,11 @@ export function RideBoardScreen({ initialResort, initialDay }: { initialResort?:
                   {shown.length} ride{shown.length === 1 ? '' : 's'} · {seatsLeft(shown)} open seat{seatsLeft(shown) === 1 ? '' : 's'}
                   {day === 'all' ? '' : ` ${dayLabel(day).toLowerCase() === 'today' || dayLabel(day).toLowerCase() === 'tomorrow' ? dayLabel(day).toLowerCase() : `on ${longDay(day)}`}`}
                 </Text>
-                <Chip label="Open seats only" selected={openOnly} onPress={() => setOpenOnly((o) => !o)} />
+                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                  <Chip label="↑ Rides up" selected={legFilter === 'to'} onPress={() => setLegFilter((l) => (l === 'to' ? null : 'to'))} />
+                  <Chip label="↓ Rides down" selected={legFilter === 'from'} onPress={() => setLegFilter((l) => (l === 'from' ? null : 'from'))} />
+                  <Chip label="Open seats only" selected={openOnly} onPress={() => setOpenOnly((o) => !o)} />
+                </View>
               </View>
 
               {shown.length === 0 ? (

@@ -1,7 +1,8 @@
 import { AppProviders, Loading, useAuth, useTheme, withQuery, type Nav, type Route } from '@lift2lift/app';
+import * as Notifications from 'expo-notifications';
 import { router, Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { api, isConfigured } from '../lib/api';
@@ -24,6 +25,7 @@ function RootStack() {
         <Stack.Screen name="profile/setup" />
         <Stack.Screen name="u" />
         <Stack.Screen name="review" />
+        <Stack.Screen name="rides" options={{ gestureEnabled: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />
@@ -35,7 +37,23 @@ function RootStack() {
   );
 }
 
+/** Tapping a ride reminder opens that ride in Your Rides (the push carries data.url = lift2lift:///rides?ride=…&leg=…). */
+function useReminderTaps() {
+  useEffect(() => {
+    const open = (n: Notifications.Notification | undefined) => {
+      const url = n?.request.content.data?.url;
+      if (typeof url === 'string') router.push(url.replace(/^lift2lift:\/\//, '') as never);
+    };
+    // Cold start from a tapped notification.
+    const last = Notifications.getLastNotificationResponse();
+    if (last) open(last.notification);
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => open(r.notification));
+    return () => sub.remove();
+  }, []);
+}
+
 export default function RootLayout() {
+  useReminderTaps();
   const pathname = usePathname() as Route;
   const nav = useMemo<Nav>(
     () => ({

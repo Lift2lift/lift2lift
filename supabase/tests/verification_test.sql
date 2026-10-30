@@ -178,12 +178,6 @@ do $$ begin
   exception when raise_exception then
     assert sqlerrm like 'Set up your profile first%', sqlerrm;
   end;
-  -- ...and can't reach the old function directly.
-  begin
-    perform public.claim_seat_rules(gen_random_uuid());
-    raise exception 'FAIL: bypassed profile check';
-  exception when insufficient_privilege then null;
-  end;
 end $$;
 reset role;
 

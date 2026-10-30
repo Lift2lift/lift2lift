@@ -32,9 +32,15 @@ export function gasCapDollars(resortId: string, departAt: string | Date) {
   return Math.floor((resort.roundTripMiles * mileageCents(year)) / 100);
 }
 
+/** Cap for a trip type: a one-way trip drives half the round-trip miles. */
+export function tripGasCap(resortId: string, departAt: string | Date, tripType: 'round_trip' | 'to_mountain' | 'from_mountain' = 'round_trip') {
+  const cap = gasCapDollars(resortId, departAt);
+  return tripType === 'round_trip' ? cap : Math.floor(cap / 2);
+}
+
 /** Highest per-rider ask so that a full car stays under the cap. */
-export function maxGasPerRider(resortId: string, departAt: string | Date, seats: number) {
-  return Math.floor(gasCapDollars(resortId, departAt) / Math.max(1, seats));
+export function maxGasPerRider(resortId: string, departAt: string | Date, seats: number, tripType: 'round_trip' | 'to_mountain' | 'from_mountain' = 'round_trip') {
+  return Math.floor(tripGasCap(resortId, departAt, tripType) / Math.max(1, seats));
 }
 
 export function bookingClosed(departAt: string, now = Date.now()) {

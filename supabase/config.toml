@@ -67,6 +67,10 @@ verify_jwt = true
 [functions.identity-webhook]
 verify_jwt = false
 
+# Called every minute by pg_cron with CRON_SECRET (see README), not by users.
+[functions.send-ride-reminders]
+verify_jwt = false
+
 # Hosted project overrides, applied by `supabase config push`.
 # Without these the hosted Site URL stays at localhost and email links land there.
 [remotes.production]

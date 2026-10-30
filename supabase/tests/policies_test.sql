@@ -127,7 +127,7 @@ do $$ begin
     perform public.claim_seat((select id from public.rides where resort_id = 'breck'));
     raise exception 'FAIL: claimed a full ride';
   exception when raise_exception then
-    assert sqlerrm = 'This ride is full.', sqlerrm;
+    assert sqlerrm = 'The ride up is full.', sqlerrm;
   end;
 end $$;
 

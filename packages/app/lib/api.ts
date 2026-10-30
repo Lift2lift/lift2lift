@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, DriverVerification, Gender, PendingReview, ProfileFields, ProfilePage, RatingSummary, Review, Session } from './types';
+import type { Api, BoardRide, ChatMessage, DriverVerification, Gender, PendingReview, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
 
 type BoardRow = {
   id: string;
@@ -27,6 +27,12 @@ type BoardRow = {
   driver_driving_avg: number | null;
   driver_experience_avg: number | null;
   driver_review_count: number;
+  trip_type: TripType;
+  return_at: string | null;
+  return_meet: string;
+  seats_taken_to: number;
+  seats_taken_from: number;
+  rider_legs: SeatLegs[];
 };
 
 type ProfileRow = {
@@ -67,7 +73,7 @@ type VerificationRow = {
 const DOCS_BUCKET = 'driver-docs';
 
 const BOARD_COLUMNS =
-  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders, driver_driving_avg, driver_experience_avg, driver_review_count';
+  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders, driver_driving_avg, driver_experience_avg, driver_review_count, trip_type, return_at, return_meet, seats_taken_to, seats_taken_from, rider_legs';
 
 function toSession(s: SupabaseSession | null): Session | null {
   if (!s) return null;
@@ -103,7 +109,17 @@ function toRide(r: BoardRow, urls: Record<string, string>): BoardRide {
     driverDrivingAvg: r.driver_driving_avg == null ? null : Number(r.driver_driving_avg),
     driverExperienceAvg: r.driver_experience_avg == null ? null : Number(r.driver_experience_avg),
     driverReviewCount: r.driver_review_count ?? 0,
+    tripType: r.trip_type ?? 'round_trip',
+    returnAt: r.return_at,
+    returnMeet: r.return_meet ?? '',
+    seatsTakenTo: r.seats_taken_to ?? 0,
+    seatsTakenFrom: r.seats_taken_from ?? 0,
+    riderLegs: r.rider_legs ?? [],
   };
+}
+
+function toMessage(m: { id: string; ride_id: string; sender_id: string; body: string; created_at: string }): ChatMessage {
+  return { id: m.id, rideId: m.ride_id, senderId: m.sender_id, body: m.body, createdAt: m.created_at };
 }
 
 /** Throw a readable error for any Supabase failure. */
@@ -200,7 +216,10 @@ export function createApi(supabase: SupabaseClient): Api {
       check(
         await supabase.from('rides').insert({
           resort_id: ride.resortId,
+          trip_type: ride.tripType,
           depart_at: ride.departAt,
+          return_at: ride.tripType === 'round_trip' ? ride.returnAt : null,
+          return_meet: ride.tripType === 'round_trip' ? ride.returnMeet : '',
           leave_from: ride.leaveFrom,
           seats_total: ride.seatsTotal,
           gas_per_rider: ride.gasPerRider,
@@ -213,8 +232,8 @@ export function createApi(supabase: SupabaseClient): Api {
     async cancelRide(rideId) {
       check(await supabase.from('rides').update({ cancelled_at: new Date().toISOString() }).eq('id', rideId));
     },
-    async claimSeat(rideId) {
-      check(await supabase.rpc('claim_seat', { p_ride_id: rideId }));
+    async claimSeat(rideId, legs = 'both') {
+      check(await supabase.rpc('claim_seat', { p_ride_id: rideId, p_legs: legs }));
     },
     async leaveSeat(rideId) {
       const { data } = await supabase.auth.getSession();
@@ -413,6 +432,68 @@ export function createApi(supabase: SupabaseClient): Api {
     },
 
     getForecast: fetchForecast,
+
+    async myTrips() {
+      const { data } = check(await supabase.rpc('my_trips'));
+      type P = { id: string; name: string; avatar_path: string | null; gender: Gender | null; legs?: SeatLegs };
+      type Row = {
+        id: string; role: Trip['role']; my_legs: SeatLegs | null; resort_id: string; trip_type: TripType; depart_at: string; return_at: string | null;
+        leave_from: string; return_meet: string; seats_total: number; gas_per_rider: number; contact: string; driver: P; passengers: P[];
+        checkins: { leg: 'to' | 'from'; rider_id: string; rider_confirmed_at: string | null; driver_status: 'picked_up' | 'no_show' | null }[];
+      };
+      const rows = (data ?? []) as Row[];
+      const urls = await signAvatars(rows.flatMap((r) => [r.driver.avatar_path, ...r.passengers.map((p) => p.avatar_path)]));
+      const person = (p: P) => ({ id: p.id, name: p.name, gender: p.gender, avatarUrl: p.avatar_path ? urls[p.avatar_path] ?? null : null });
+      return rows.map(
+        (r): Trip => ({
+          id: r.id,
+          role: r.role,
+          myLegs: r.my_legs,
+          resortId: r.resort_id,
+          tripType: r.trip_type,
+          departAt: r.depart_at,
+          returnAt: r.return_at,
+          leaveFrom: r.leave_from,
+          returnMeet: r.return_meet,
+          seatsTotal: r.seats_total,
+          gasPerRider: r.gas_per_rider,
+          contact: r.contact,
+          driver: person(r.driver),
+          passengers: r.passengers.map((p) => ({ ...person(p), legs: p.legs ?? 'both' })),
+          checkins: r.checkins.map((c) => ({ leg: c.leg, riderId: c.rider_id, riderConfirmedAt: c.rider_confirmed_at, driverStatus: c.driver_status })),
+        }),
+      );
+    },
+    async listMessages(rideId) {
+      const { data } = check(
+        await supabase.from('ride_messages').select('id, ride_id, sender_id, body, created_at').eq('ride_id', rideId).order('created_at').limit(500),
+      );
+      return ((data ?? []) as { id: string; ride_id: string; sender_id: string; body: string; created_at: string }[]).map(toMessage);
+    },
+    async sendMessage(rideId, body) {
+      check(await supabase.from('ride_messages').insert({ ride_id: rideId, body: body.trim().slice(0, 1000) }));
+    },
+    subscribeMessages(rideId, onMessage) {
+      const channel = supabase
+        .channel(`ride-chat-${rideId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, (payload) =>
+          onMessage(toMessage(payload.new as { id: string; ride_id: string; sender_id: string; body: string; created_at: string })),
+        )
+        .subscribe();
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    },
+    async confirmMySeat(rideId, leg) {
+      check(await supabase.rpc('confirm_my_seat', { p_ride_id: rideId, p_leg: leg }));
+    },
+    async confirmPassenger(rideId, leg, riderId, status) {
+      check(await supabase.rpc('confirm_passenger', { p_ride_id: rideId, p_leg: leg, p_rider_id: riderId, p_status: status }));
+    },
+    async registerPushToken(token, platform) {
+      check(await supabase.rpc('register_push_token', { p_token: token, p_platform: platform }));
+    },
+
   };
   return api;
 }

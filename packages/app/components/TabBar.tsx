@@ -3,7 +3,8 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
-import { useAuth, useNav, type Route } from '../providers';
+import { upcomingLegs } from '../lib/trips';
+import { useAuth, useMyRides, useNav, type Route } from '../providers';
 
 /** Bottom tab bar for the phone layout: Rides, Snow, Post, Profile. */
 export function TabBar() {
@@ -12,12 +13,26 @@ export function TabBar() {
   const compact = useCompact();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
-  if (!compact) return null;
+  const { trips, locked } = useMyRides();
+  if (!compact || locked) return null; // ride mode hides the tabs
+  const soon = (trips ? upcomingLegs(trips) : []).some((e) => new Date(e.at).getTime() - Date.now() < 24 * 3600 * 1000);
 
   const initial = ((session?.name || session?.email || '?')[0] || '?').toUpperCase();
   const tabs: { route: Route; label: string; icon: (active: boolean) => ReactNode; match: Route[] }[] = [
     { route: '/', label: 'Rides', match: ['/'], icon: (a) => <Text style={{ fontSize: 20, color: a ? t.ink : t.muted }}>▲</Text> },
-    { route: '/snow', label: 'Snow', match: ['/snow'], icon: (a) => <Text style={{ fontSize: 21, color: a ? t.snow : t.muted }}>❄</Text> },
+    {
+      route: '/rides',
+      label: 'Your Rides',
+      match: ['/rides'],
+      icon: (a) => (
+        <View>
+          <View style={{ width: 24, height: 17, borderRadius: 4, borderWidth: 2, borderColor: a ? t.ink : t.muted, borderStyle: 'solid', justifyContent: 'center' }}>
+            <View style={{ position: 'absolute', left: 7, top: 1, bottom: 1, borderLeftWidth: 1.5, borderColor: a ? t.ink : t.muted, borderStyle: 'dashed' }} />
+          </View>
+          {soon ? <View style={{ position: 'absolute', right: -4, top: -4, width: 10, height: 10, borderRadius: 5, backgroundColor: t.danger, borderWidth: 1.5, borderColor: t.surface }} /> : null}
+        </View>
+      ),
+    },
     {
       route: '/post',
       label: 'Post',
@@ -28,6 +43,7 @@ export function TabBar() {
         </View>
       ),
     },
+    { route: '/snow', label: 'Snow', match: ['/snow'], icon: (a) => <Text style={{ fontSize: 21, color: a ? t.snow : t.muted }}>❄</Text> },
     {
       route: '/profile',
       label: 'Profile',

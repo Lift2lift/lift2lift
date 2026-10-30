@@ -35,7 +35,7 @@ begin
     insert into public.rides (resort_id, depart_at, leave_from, seats_total, gas_per_rider, contact) values ('eldora', v_day, 'x', 4, 8, 'x');
     raise exception 'FAIL: gas over cap accepted';
   exception when raise_exception then
-    assert sqlerrm like 'Colorado caps gas money for a trip to Eldora at $30 total. With 4 seats, ask at most $7 per rider.', sqlerrm;
+    assert sqlerrm like 'Colorado caps gas money for a round trip to Eldora at $30 total. With 4 seats, ask at most $7 per rider.', sqlerrm;
   end;
 
   -- At the cap is fine: 6 seats × $5 = $30.
@@ -74,7 +74,7 @@ values ('11111111-1111-4111-8111-111111111111', 'copper', date_trunc('day', now(
        ('11111111-1111-4111-8111-111111111111', 'keystone', now() + interval '5 days 3 hours', 'Soon lot', 2, 10, '303-555-0142');
 -- Move the second ride to 1 hour from now (the trigger would refuse this, so switch it off for the test).
 alter table public.rides disable trigger rides_enforce_rules;
-update public.rides set depart_at = now() + interval '1 hour' where leave_from = 'Soon lot';
+update public.rides set depart_at = now() + interval '1 hour', return_at = now() + interval '9 hours' where leave_from = 'Soon lot';
 alter table public.rides enable trigger rides_enforce_rules;
 
 set role authenticated;

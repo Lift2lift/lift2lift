@@ -5,9 +5,9 @@
 -- (Inserted directly with the trigger off, since rides normally can't be posted in the past.)
 alter table public.rides disable trigger rides_enforce_rules;
 alter table public.rides disable trigger rides_require_verified_driver;
-insert into public.rides (id, driver_id, resort_id, depart_at, ride_date, leave_from, seats_total, gas_per_rider, contact)
-values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', 'loveland', now() - interval '3 days', (now() - interval '3 days')::date, 'Kittredge', 3, 10, '303'),
-       ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111', 'vail', now() - interval '20 days', (now() - interval '20 days')::date, 'Kittredge', 3, 10, '303');
+insert into public.rides (id, driver_id, resort_id, trip_type, depart_at, ride_date, leave_from, seats_total, gas_per_rider, contact)
+values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', 'loveland', 'to_mountain', now() - interval '3 days', (now() - interval '3 days')::date, 'Kittredge', 3, 10, '303'),
+       ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111', 'vail', 'to_mountain', now() - interval '20 days', (now() - interval '20 days')::date, 'Kittredge', 3, 10, '303');
 alter table public.rides enable trigger rides_enforce_rules;
 alter table public.rides enable trigger rides_require_verified_driver;
 insert into public.ride_seats (ride_id, rider_id) values

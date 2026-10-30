@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useApi, useAuth, useNav, type Route } from '../providers';
+import { useApi, useAuth, useMyRides, useNav, type Route } from '../providers';
 import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
 
 const TABS: { route: Route; label: string }[] = [
   { route: '/', label: 'Rides' },
+  { route: '/rides', label: 'Your Rides' },
   { route: '/snow', label: 'Snow' },
 ];
 
@@ -17,7 +18,9 @@ export function AppHeader() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
-  const compact = useCompact(); // phone layout: tabs and Post move to the bottom tab bar
+  const { locked } = useMyRides();
+  // Phone layout moves tabs and Post to the bottom tab bar; ride mode hides them.
+  const compact = useCompact() || !!locked;
   const first = (session?.name || session?.email || '').split(/[ @]/)[0];
 
   return (

@@ -15,6 +15,13 @@ export type Resort = {
 };
 
 /** A ride as it appears on the board (from the `ride_board` view). */
+/** round_trip: up at departAt, back at returnAt · to_mountain / from_mountain: one way at departAt */
+export type TripType = 'round_trip' | 'to_mountain' | 'from_mountain';
+/** A leg of a trip: up to the mountain or back down. */
+export type Leg = 'to' | 'from';
+/** What a passenger booked on a round trip. One-way rides are always 'both'. */
+export type SeatLegs = 'both' | 'to' | 'from';
+
 export type BoardRide = {
   id: string;
   driverId: string;
@@ -39,7 +46,37 @@ export type BoardRide = {
   driverDrivingAvg: number | null;
   driverExperienceAvg: number | null;
   driverReviewCount: number;
+  tripType: TripType;
+  returnAt: string | null;
+  /** Where to meet at the mountain for the ride back (round trips). */
+  returnMeet: string;
+  seatsTakenTo: number;
+  seatsTakenFrom: number;
+  riderLegs: SeatLegs[];
 };
+
+export type Person = { id: string; name: string; avatarUrl: string | null; gender: Gender | null };
+
+/** A trip in Your Rides: one I'm driving or have a seat on. */
+export type Trip = {
+  id: string;
+  role: 'driver' | 'passenger';
+  myLegs: SeatLegs | null;
+  resortId: string;
+  tripType: TripType;
+  departAt: string;
+  returnAt: string | null;
+  leaveFrom: string;
+  returnMeet: string;
+  seatsTotal: number;
+  gasPerRider: number;
+  contact: string;
+  driver: Person;
+  passengers: (Person & { legs: SeatLegs })[];
+  checkins: { leg: Leg; riderId: string; riderConfirmedAt: string | null; driverStatus: 'picked_up' | 'no_show' | null }[];
+};
+
+export type ChatMessage = { id: string; rideId: string; senderId: string; body: string; createdAt: string };
 
 /** Averages about one person, split by role. */
 export type RatingSummary = {
@@ -146,11 +183,16 @@ export interface DeviceServices {
   pickPhoto(): Promise<PickedPhoto | null>;
   /** Opens Stripe's hosted ID check. On web this leaves the page; on iOS it resolves when the browser closes. */
   openIdentityCheck(url: string): Promise<void>;
+  /** Asks to allow notifications and returns this phone's push token, or null (web, or declined). */
+  registerForPush(): Promise<{ token: string; platform: 'ios' | 'android' | 'web' } | null>;
 }
 
 export type NewRide = {
   resortId: string;
+  tripType: TripType;
   departAt: string; // ISO timestamp
+  returnAt: string | null; // round trips
+  returnMeet: string;
   leaveFrom: string;
   seatsTotal: number;
   gasPerRider: number;
@@ -190,7 +232,7 @@ export interface Api {
   listRides(): Promise<BoardRide[]>;
   postRide(ride: NewRide): Promise<void>;
   cancelRide(rideId: string): Promise<void>;
-  claimSeat(rideId: string): Promise<void>;
+  claimSeat(rideId: string, legs?: SeatLegs): Promise<void>;
   leaveSeat(rideId: string): Promise<void>;
   removeRider(rideId: string, riderId: string): Promise<void>;
   rideContact(rideId: string): Promise<string | null>;
@@ -211,4 +253,16 @@ export interface Api {
   startIdentityCheck(platform: DeviceServices['platform']): Promise<{ url?: string; status: 'pending' | 'processing' | 'verified' }>;
 
   getForecast(): Promise<Forecast>;
+
+  /** Your Rides: trips I'm driving or riding, upcoming and in progress. */
+  myTrips(): Promise<Trip[]>;
+  listMessages(rideId: string): Promise<ChatMessage[]>;
+  sendMessage(rideId: string, body: string): Promise<void>;
+  /** Live chat updates. Returns a function that stops listening. */
+  subscribeMessages(rideId: string, onMessage: (m: ChatMessage) => void): () => void;
+  /** Passenger: confirm you're in for this leg. */
+  confirmMySeat(rideId: string, leg: Leg): Promise<void>;
+  /** Driver: mark a passenger picked up or a no-show. */
+  confirmPassenger(rideId: string, leg: Leg, riderId: string, status: 'picked_up' | 'no_show'): Promise<void>;
+  registerPushToken(token: string, platform: 'ios' | 'android' | 'web'): Promise<void>;
 }

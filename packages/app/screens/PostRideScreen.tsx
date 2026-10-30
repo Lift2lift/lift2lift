@@ -7,12 +7,15 @@ import { GEAR_OPTIONS, PICKUP_SPOTS } from '../lib/config';
 import { clockFromHHMM, dayLabel, driveText, nextDays, nextSaturday, toISO } from '../lib/dates';
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
-import { CARPOOL_DISCLAIMER, earliestDeparture, gasCapDollars, MAX_PASSENGERS, maxGasPerRider, mileageCents } from '../lib/rules';
+import { CARPOOL_DISCLAIMER, earliestDeparture, MAX_PASSENGERS, maxGasPerRider, mileageCents, tripGasCap } from '../lib/rules';
+import { oneWayShare, TRIP_LABEL } from '../lib/trips';
+import type { TripType } from '../lib/types';
 import { useTheme } from '../lib/theme';
 import { useForecast } from '../lib/useForecast';
 import { canHost, type DriverVerification } from '../lib/types';
 import { useApi, useAuth, useNav } from '../providers';
 
+const RETURN_TIMES = ['12:00', '13:00', '14:00', '15:00', '15:30', '16:00', '16:30', '17:00', '18:00', '20:00'];
 const TIMES = ['05:00', '05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00', '12:00', '15:00', '16:00'];
 const GAS_STEP = 5;
 const SEAT_OPTIONS = Array.from({ length: MAX_PASSENGERS }, (_, i) => i + 1);
@@ -28,7 +31,10 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
 
   const [resortId, setResortId] = useState(initialResort && RESORT_BY_ID[initialResort] ? initialResort : '');
   const [day, setDay] = useState(days.includes(nextSaturday()) ? nextSaturday() : days[1]);
+  const [tripType, setTripType] = useState<TripType>('round_trip');
   const [time, setTime] = useState('06:30');
+  const [returnTime, setReturnTime] = useState('16:00');
+  const [returnMeet, setReturnMeet] = useState('');
   const [leaveFrom, setLeaveFrom] = useState('');
   const [seats, setSeats] = useState(3);
   const [gas, setGas] = useState(15);
@@ -75,8 +81,10 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
 
   // Colorado gas cap for this trip, and the most each rider can be asked for.
   const sampleDepart = toISO(day, timeValue ?? '06:30');
-  const cap = resortId ? gasCapDollars(resortId, sampleDepart) : 0;
-  const maxPer = resortId ? maxGasPerRider(resortId, sampleDepart, seats) : 0;
+  const cap = resortId ? tripGasCap(resortId, sampleDepart, tripType) : 0;
+  const maxPer = resortId ? maxGasPerRider(resortId, sampleDepart, seats, tripType) : 0;
+  const validReturns = RETURN_TIMES.filter((tm) => tm > (timeValue ?? '00:00'));
+  const returnValue = validReturns.includes(returnTime) ? returnTime : validReturns[validReturns.length - 1];
   const gasValue = resortId ? Math.min(gas, maxPer) : gas;
   const gasOptions = useMemo(() => {
     if (!resortId) return [0, 5, 10, 15, 20];
@@ -96,11 +104,15 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
     if (new Date(departAt) < earliestDeparture()) return setError('Rides have to leave at least 2 hours from now so riders can book ahead.');
     if (!leaveFrom.trim()) return setError("Add where you're leaving from so riders know where to meet.");
     if (!contact.trim()) return setError('Add a phone number or handle so riders can reach you.');
+    if (tripType === 'round_trip' && !returnValue) return setError('Pick a time for the ride back.');
     setSaving(true);
     try {
       await api.postRide({
         resortId,
+        tripType,
         departAt,
+        returnAt: tripType === 'round_trip' && returnValue ? toISO(day, returnValue) : null,
+        returnMeet: tripType === 'round_trip' ? (returnMeet.trim() || `${RESORT_BY_ID[resortId].name} base area`).slice(0, 80) : '',
         leaveFrom: leaveFrom.trim().slice(0, 80),
         seatsTotal: seats,
         gasPerRider: gasValue,
@@ -151,7 +163,23 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
       </View>
 
       <View style={{ gap: 8 }}>
-        <Label>Leaving at</Label>
+        <Label>Trip</Label>
+        <ChipRow wrap>
+          {(['round_trip', 'to_mountain', 'from_mountain'] as TripType[]).map((tt) => (
+            <Chip key={tt} label={TRIP_LABEL[tt]} selected={tripType === tt} onPress={() => setTripType(tt)} />
+          ))}
+        </ChipRow>
+        <Text style={{ color: t.muted, fontSize: 13 }}>
+          {tripType === 'round_trip'
+            ? 'Up and back. Riders can book both ways or just one, and a one-way seat pays half.'
+            : tripType === 'to_mountain'
+              ? 'Just the drive up. Riders find their own way back.'
+              : 'Just the drive back down from the mountain.'}
+        </Text>
+      </View>
+
+      <View style={{ gap: 8 }}>
+        <Label>{tripType === 'from_mountain' ? 'Leaving the mountain at' : 'Leaving at'}</Label>
         {validTimes.length ? (
           <ChipRow>
             {validTimes.map((tm) => (
@@ -164,13 +192,39 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
       </View>
 
       <View style={{ gap: 8 }}>
-        <Field label="Leaving from" value={leaveFrom} onChangeText={setLeaveFrom} placeholder="e.g. Kittredge parking lot" maxLength={80} />
-        <ChipRow>
-          {PICKUP_SPOTS.map((p) => (
-            <Chip key={p} label={p} selected={leaveFrom === p} onPress={() => setLeaveFrom(p)} />
-          ))}
-        </ChipRow>
+        <Field
+          label={tripType === 'from_mountain' ? 'Meet at the mountain' : 'Leaving from'}
+          value={leaveFrom}
+          onChangeText={setLeaveFrom}
+          placeholder={tripType === 'from_mountain' ? 'e.g. Peak 8 base, by the ticket office' : 'e.g. Kittredge parking lot'}
+          maxLength={80}
+        />
+        {tripType !== 'from_mountain' ? (
+          <ChipRow>
+            {PICKUP_SPOTS.map((p) => (
+              <Chip key={p} label={p} selected={leaveFrom === p} onPress={() => setLeaveFrom(p)} />
+            ))}
+          </ChipRow>
+        ) : null}
       </View>
+
+      {tripType === 'round_trip' ? (
+        <View style={{ gap: 8 }}>
+          <Label>Heading back at</Label>
+          <ChipRow>
+            {validReturns.map((tm) => (
+              <Chip key={tm} label={clockFromHHMM(tm)} selected={returnValue === tm} onPress={() => setReturnTime(tm)} />
+            ))}
+          </ChipRow>
+          <Field
+            label="Meet for the ride back"
+            value={returnMeet}
+            onChangeText={setReturnMeet}
+            placeholder={resortId ? `${RESORT_BY_ID[resortId].name} base area` : 'Base area parking lot'}
+            maxLength={80}
+          />
+        </View>
+      ) : null}
 
       <View style={{ gap: 8 }}>
         <Label>Open seats</Label>
@@ -190,7 +244,7 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
         </ChipRow>
         <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
           {resortId
-            ? `Colorado caps gas money at your real driving cost: ${RESORT_BY_ID[resortId].roundTripMiles} mi round trip × ${mileageCents(new Date(sampleDepart).getFullYear())}¢ = $${cap} for this trip. With ${seats} seat${seats > 1 ? 's' : ''}, that's up to $${maxPer} per rider.`
+            ? `Colorado caps gas money at your real driving cost: ${tripType === 'round_trip' ? RESORT_BY_ID[resortId].roundTripMiles : Math.round(RESORT_BY_ID[resortId].roundTripMiles / 2)} mi ${tripType === 'round_trip' ? 'round trip' : 'one way'} × ${mileageCents(new Date(sampleDepart).getFullYear())}¢ = $${cap} for this trip. With ${seats} seat${seats > 1 ? 's' : ''}, that's up to $${maxPer} per rider.${tripType === 'round_trip' && gasValue > 0 ? ` One-way riders pay $${oneWayShare(gasValue)}.` : ''}`
             : 'Pick a mountain to see the most you can ask. Colorado caps gas money at your real driving cost.'}
         </Text>
       </View>
