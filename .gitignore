@@ -10,3 +10,5 @@ supabase/.temp/
 supabase/.branches/
 .vercel
 .env*
+# Keep the example env files in git
+!.env*.example

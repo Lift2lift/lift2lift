@@ -99,7 +99,7 @@ App ── identity-start ──▶ Stripe hosted page (license + selfie) ──
 
 1. `npx supabase functions deploy identity-start identity-webhook`
 2. `npx supabase secrets set --env-file supabase/functions/.env`, using live keys, your real `SITE_URL` and `ALLOWED_ORIGINS`.
-3. In Stripe → Developers → Webhooks, add `https://aqoqfsesceiykkoahnej.supabase.co/functions/v1/identity-webhook` with the four `identity.verification_session.*` events, and set its signing secret as `STRIPE_IDENTITY_WEBHOOK_SECRET`.
+3. In Stripe → Developers → Webhooks, add `https://vpkxesucfaofwazqgpni.supabase.co/functions/v1/identity-webhook` with the four `identity.verification_session.*` events, and set its signing secret as `STRIPE_IDENTITY_WEBHOOK_SECRET`.
 4. Publish the biometric policy (`docs/biometric-privacy-policy.md`, a draft for a lawyer to review) on the website.
 
 **Privacy by design:** Lift2Lift stores only the result, Stripe's reason code when a check fails, the name on the license and the consent date. With `REDACT_AFTER_CHECK=true` (the default), the webhook asks Stripe to delete the license images and selfie as soon as a check passes.
@@ -182,7 +182,7 @@ Then in the SQL editor (enable the **pg_cron** and **pg_net** extensions first):
 ```sql
 select cron.schedule('send-ride-reminders', '* * * * *', $$
   select net.http_post(
-    url := 'https://aqoqfsesceiykkoahnej.supabase.co/functions/v1/send-ride-reminders',
+    url := 'https://vpkxesucfaofwazqgpni.supabase.co/functions/v1/send-ride-reminders',
     headers := jsonb_build_object('Authorization', 'Bearer <your CRON_SECRET>')
   );
 $$);
