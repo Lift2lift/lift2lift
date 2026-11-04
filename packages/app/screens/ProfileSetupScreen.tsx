@@ -29,6 +29,9 @@ const EMPTY: ProfileFields = {
   prompts: {},
 };
 
+/** Already answered by "On the snow", so the picker doesn't ask again. */
+const ASKED_ABOVE = ['skiing', 'snowboarding'];
+
 /**
  * First-time setup, shown the first time someone posts a ride or calls shotgun.
  * 1. Profile photo: the live selfie from the ID check (matched to the license).
@@ -50,6 +53,7 @@ export function ProfileSetupScreen({ then, verifyDone }: { then?: string; verify
   const [saving, setSaving] = useState(false);
   const [polling, setPolling] = useState(!!verifyDone);
   const [allMountains, setAllMountains] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
   const tries = useRef(0);
   const loaded = useRef(false);
 
@@ -312,8 +316,8 @@ export function ProfileSetupScreen({ then, verifyDone }: { then?: string; verify
             hint="Shown as a link on your profile."
           />
 
-          <View style={{ gap: 12 }}>
-            <Label>A few quick ones (optional)</Label>
+          {showPrompts ? (
+            <View style={{ gap: 12 }}>
             {PROFILE_PROMPTS.map((p) => (
               <Field
                 key={p.key}
@@ -324,7 +328,12 @@ export function ProfileSetupScreen({ then, verifyDone }: { then?: string; verify
                 maxLength={140}
               />
             ))}
-          </View>
+            </View>
+          ) : (
+            <Text onPress={() => setShowPrompts(true)} accessibilityRole="button" style={{ color: t.link, fontWeight: '600', fontSize: 14 }}>
+              Add fun profile answers (optional)
+            </Text>
+          )}
 
           <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'space-between' }}>
             <Button variant="ghost" title="Back" onPress={() => setStep(0)} />
@@ -344,7 +353,7 @@ export function ProfileSetupScreen({ then, verifyDone }: { then?: string; verify
             <View key={g.title} style={{ gap: 8 }}>
               <Label>{g.title}</Label>
               <ChipRow wrap>
-                {g.items.map((it) => {
+                {g.items.filter((it) => !ASKED_ABOVE.includes(it.id)).map((it) => {
                   const on = fields.interests.includes(it.id);
                   return (
                     <Chip

@@ -9,12 +9,20 @@ export function field(fields: IdField[], type: string) {
   return (f?.NormalizedValue?.Value ?? f?.Text ?? '').trim();
 }
 
-/** Accepts Textract's normalized ISO value or a printed MM/DD/YYYY date. Returns YYYY-MM-DD, or null. */
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/** Accepts ISO, MM/DD/YYYY, MM/DD/YY and "Dec 1, 2026". Returns YYYY-MM-DD, or null. */
 export function parseDate(value: string) {
   const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const us = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (us) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+  const us = value.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4}|\d{2})\b/);
+  if (us) {
+    const year = us[3].length === 2 ? `20${us[3]}` : us[3];
+    return `${year}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+  }
+  const named = value.match(/([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/i);
+  const month = named ? MONTHS.indexOf(named[1].toLowerCase()) : -1;
+  if (named && month >= 0) return `${named[3]}-${String(month + 1).padStart(2, '0')}-${named[2].padStart(2, '0')}`;
   return null;
 }
 

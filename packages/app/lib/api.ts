@@ -66,7 +66,10 @@ type VerificationRow = {
   id_name: string | null;
   consented: boolean;
   has_insurance: boolean;
-  insurance_path: string | null;
+  insurance_status: DriverVerification['insuranceStatus'];
+  insurance_error: string | null;
+  insurer: string | null;
+  insurance_expires: string | null;
   review_note: string | null;
 };
 
@@ -378,11 +381,6 @@ export function createApi(supabase: SupabaseClient): Api {
     async getDriverVerification(options) {
       const { data } = check(await supabase.rpc('driver_verification_status'));
       const v = data as VerificationRow;
-      const signed = async (path: string | null) => {
-        if (!path || !options?.withPhotos) return null;
-        const res = await supabase.storage.from(DOCS_BUCKET).createSignedUrl(path, 600);
-        return res.data?.signedUrl ?? null;
-      };
       return {
         status: v.status,
         identity: v.identity_status,
@@ -390,7 +388,10 @@ export function createApi(supabase: SupabaseClient): Api {
         idName: v.id_name,
         consented: v.consented,
         hasInsurance: v.has_insurance,
-        insuranceUrl: await signed(v.insurance_path),
+        insuranceStatus: v.insurance_status,
+        insuranceError: v.insurance_error,
+        insurer: v.insurer,
+        insuranceExpires: v.insurance_expires,
         reviewNote: v.review_note,
       };
     },
@@ -428,24 +429,21 @@ export function createApi(supabase: SupabaseClient): Api {
       }
       return data as { url?: string; status: 'pending' | 'processing' | 'verified' };
     },
-    async uploadDriverDoc(doc, photo) {
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user.id;
-      if (!uid) throw new Error('Sign in first.');
-      const bucket = supabase.storage.from(DOCS_BUCKET);
-      // Replacing a photo with a different file type: remove the old one.
-      const existing = await bucket.list(uid);
-      const stale = (existing.data ?? []).filter((f) => f.name.startsWith(`${doc}.`) && f.name !== `${doc}.${photo.ext}`).map((f) => `${uid}/${f.name}`);
-      if (stale.length) await bucket.remove(stale);
-      const up = await bucket.upload(`${uid}/${doc}.${photo.ext}`, photo.body, { contentType: photo.contentType, upsert: true });
-      if (up.error) {
-        const m = up.error.message.toLowerCase();
-        if (m.includes('size') || m.includes('too large')) throw new Error('That photo is too big. Try again with a smaller one (under 10 MB).');
-        if (m.includes('mime') || m.includes('type')) throw new Error('Use a JPG, PNG or HEIC photo.');
-        throw new Error(friendlyError(up.error));
+    async checkInsurance(card) {
+      const { error } = await supabase.functions.invoke('insurance-check', { body: { card: await photoBase64(card) } });
+      if (error) {
+        let message = "Couldn't check your insurance card. Try again in a minute.";
+        try {
+          const body = await (error as { context?: Response }).context?.json();
+          if (body?.error) message = body.error;
+        } catch {
+          // keep the default message
+        }
+        throw new Error(message);
       }
-      return api.getDriverVerification({ withPhotos: true });
+      return api.getDriverVerification();
     },
+
 
     getForecast: fetchForecast,
 

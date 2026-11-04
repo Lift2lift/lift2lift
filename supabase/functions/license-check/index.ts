@@ -6,38 +6,11 @@
 //
 // Body: { license: base64, selfie: base64 } (JPEG or PNG, 5 MB max each)
 
-import { AwsClient } from 'npm:aws4fetch@1.0.20';
+import { callAws, decodeBase64 as decode } from '../_shared/aws.ts';
 import { adminClient, corsHeaders, json, userClient } from '../_shared/http.ts';
 import { field, imageType, licenseProblem, MIN_SIMILARITY, type IdField } from './logic.ts';
 
-const REGION = Deno.env.get('AWS_REGION') ?? 'us-east-2';
 const MAX_BYTES = 5 * 1024 * 1024;
-
-async function callAws<T>(service: string, host: string, target: string, payload: unknown): Promise<T> {
-  const aws = new AwsClient({
-    accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID') ?? '',
-    secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY') ?? '',
-    region: REGION,
-    service,
-  });
-  const res = await aws.fetch(`https://${host}.${REGION}.amazonaws.com/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-amz-json-1.1', 'X-Amz-Target': target },
-    body: JSON.stringify(payload),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(`${target} ${res.status}`), { awsType: String(body.__type ?? '') });
-  return body as T;
-}
-
-function decode(value: unknown) {
-  if (typeof value !== 'string' || !value) return null;
-  try {
-    return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
-  } catch {
-    return null;
-  }
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });

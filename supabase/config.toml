@@ -67,6 +67,9 @@ verify_jwt = true
 [functions.license-check]
 verify_jwt = true
 
+[functions.insurance-check]
+verify_jwt = true
+
 # Stripe calls this one; it checks the Stripe signature instead of a user token.
 [functions.identity-webhook]
 verify_jwt = false

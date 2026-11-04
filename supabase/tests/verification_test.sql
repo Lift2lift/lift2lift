@@ -77,11 +77,24 @@ begin
   end;
 
   -- Insurance alone isn't enough.
-  insert into storage.objects (bucket_id, name) values ('driver-docs', '66666666-6666-4666-8666-666666666666/insurance.heic');
   v := public.driver_verification_status();
-  assert v->>'status' = 'incomplete' and (v->>'has_insurance')::boolean, v::text;
+  assert v->>'status' = 'incomplete' and not (v->>'has_insurance')::boolean, v::text;
+
+  -- The app can't write its own insurance result.
+  begin
+    perform public.set_insurance_result(auth.uid(), 'verified', null, 'Fake', current_date + 30, '1234', 'Casey Driver');
+    raise exception 'FAIL: app wrote its own insurance result';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 reset role;
+
+-- Insurance scan: expired and name-mismatch cards don't count, a good one does.
+do $$ begin
+  perform public.set_insurance_result('66666666-6666-4666-8666-666666666666', 'requires_input', 'insurance_expired', null, null, null, null);
+  assert not exists (select 1 from public.driver_verifications where user_id = '66666666-6666-4666-8666-666666666666' and insurance_expires is not null), 'failed scan saves no expiry';
+  perform public.set_insurance_result('66666666-6666-4666-8666-666666666666', 'verified', null, 'Acme', current_date + 30, '1234', 'Casey Driver');
+end $$;
 
 -- Stripe flow, as the edge functions would call it with the service role.
 select public.set_identity_session('66666666-6666-4666-8666-666666666666', 'vs_1');
@@ -206,8 +219,8 @@ end $$;
 reset role;
 
 -- New upload after the review → resubmitted.
-update storage.objects set updated_at = now() + interval '5 seconds'
-where name = '66666666-6666-4666-8666-666666666666/insurance.heic';
+update public.driver_verifications set insurance_checked_at = now() + interval '5 seconds'
+where user_id = '66666666-6666-4666-8666-666666666666';
 set role authenticated;
 do $$ begin
   assert public.driver_verification_status()->>'status' = 'submitted', 're-upload resubmits';
@@ -215,6 +228,13 @@ end $$;
 reset role;
 
 select 'ALL VERIFICATION TESTS PASSED' as result;
+
+-- Expired insurance stops hosting even though the status row hasn't refreshed.
+update public.driver_verifications set insurance_expires = current_date - 1 where user_id = '66666666-6666-4666-8666-666666666666';
+do $$ begin
+  assert not public.is_verified_driver('66666666-6666-4666-8666-666666666666'), 'expired insurance blocks hosting';
+end $$;
+update public.driver_verifications set insurance_expires = current_date + 30 where user_id = '66666666-6666-4666-8666-666666666666';
 
 -- license-check attempts: 5 a day, then blocked.
 do $$

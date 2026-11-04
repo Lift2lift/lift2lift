@@ -142,8 +142,6 @@ export type ProfilePage = ProfileFields & {
 };
 
 /** Documents drivers upload themselves. (The license is scanned in the ID check.) */
-export type DriverDoc = 'insurance';
-
 /** Stripe Identity: license scan + live selfie matched to the license photo. */
 export type IdentityStatus = 'none' | 'pending' | 'processing' | 'verified' | 'requires_input' | 'canceled';
 
@@ -159,8 +157,10 @@ export type DriverVerification = {
   /** Agreed to the selfie check (Colorado biometric consent). */
   consented: boolean;
   hasInsurance: boolean;
-  /** Short-lived link to the person's own insurance photo, for the thumbnail. */
-  insuranceUrl: string | null;
+  insuranceStatus: 'none' | 'verified' | 'review' | 'requires_input';
+  insuranceError: string | null;
+  insurer: string | null;
+  insuranceExpires: string | null;
   reviewNote: string | null;
 };
 
@@ -247,7 +247,8 @@ export interface Api {
   completeProfile(): Promise<string[]>;
 
   getDriverVerification(options?: { withPhotos?: boolean }): Promise<DriverVerification>;
-  uploadDriverDoc(doc: DriverDoc, photo: PickedPhoto): Promise<DriverVerification>;
+  /** Reads the insurance card. The photo is never stored. */
+  checkInsurance(card: PickedPhoto): Promise<DriverVerification>;
   giveBiometricConsent(): Promise<void>;
   /** Reads the license and matches the selfie to its photo. The result arrives in the response. */
   checkLicense(license: PickedPhoto, selfie: PickedPhoto): Promise<{ status: 'verified' | 'requires_input'; error?: string }>;

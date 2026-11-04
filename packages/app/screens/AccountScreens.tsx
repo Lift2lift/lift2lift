@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Brand, Button, Card, FormScreen, Heading, Label, Loading, Muted, Notice } from '../components/ui';
 import { SCHOOL_NAME } from '../lib/config';
 import { useTheme } from '../lib/theme';
+import { insuranceErrorMessage } from '../lib/identity';
 import { canHost, type DriverVerification } from '../lib/types';
 import { useApi, useAuth, useDevice, useNav } from '../providers';
 
@@ -142,7 +143,6 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
   const [polling, setPolling] = useState(!!verifyDone);
   const tries = useRef(0);
 
@@ -184,8 +184,7 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
       const photo = await device.pickPhoto();
       if (!photo) return;
       setUploading(true);
-      setPreview(photo.previewUri);
-      setV(await api.uploadDriverDoc('insurance', photo));
+      setV(await api.checkInsurance(photo));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -217,7 +216,7 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
             <StepHeader n={1} title="Verified profile" done={idDone} />
             {idDone ? (
               <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>
-                Your license is real and your profile photo matches it.{v.idName ? ` Name on license: ${v.idName}.` : ''}
+                Your license is current and your profile photo matches it.{v.idName ? ` Name on license: ${v.idName}.` : ''}
               </Text>
             ) : (
               <>
@@ -229,40 +228,22 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
             )}
           </Card>
 
-          {/* Step 2: insurance photo */}
+          {/* Step 2: insurance card, read once and never stored */}
           <Card style={{ padding: 16, gap: 12 }}>
-            <StepHeader n={2} title="Add your insurance card" done={v.hasInsurance} />
-            <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-              <View
-                style={{
-                  width: 96,
-                  height: 64,
-                  borderRadius: 10,
-                  backgroundColor: t.chip,
-                  borderWidth: v.hasInsurance ? 0 : 2,
-                  borderStyle: 'dashed',
-                  borderColor: t.line,
-                  overflow: 'hidden',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                {preview ?? v.insuranceUrl ? (
-                  <Image source={{ uri: (preview ?? v.insuranceUrl)! }} style={{ width: 96, height: 64 }} resizeMode="cover" accessibilityLabel="Insurance card photo" />
-                ) : (
-                  <Text style={{ color: t.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>INSURANCE</Text>
-                )}
-                {uploading ? (
-                  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' }}>
-                    <ActivityIndicator color="#FFFFFF" />
-                  </View>
-                ) : null}
-              </View>
-              <Text style={{ color: t.muted, fontSize: 13, lineHeight: 18, flex: 1 }}>
-                {uploading ? 'Uploading…' : 'Your card, or a screenshot from your insurance app showing your name and policy dates.'}
+            <StepHeader n={2} title="Scan your insurance card" done={v.hasInsurance} />
+            {v.hasInsurance ? (
+              <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>
+                {`${v.insurer ?? 'Your insurance'} is on file${v.insuranceExpires ? ` through ${v.insuranceExpires}` : ''}. Scan your new card when it renews.`}
               </Text>
-            </View>
-            <Button small variant={v.hasInsurance ? 'ghost' : 'primary'} title={v.hasInsurance ? 'Replace photo' : 'Add photo'} loading={uploading} onPress={addInsurance} />
+            ) : v.insuranceStatus === 'review' ? (
+              <Notice kind="info">{"The name on this card doesn't match your license, so our team needs to check it before you can host."}</Notice>
+            ) : (
+              <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>
+                {uploading ? 'Reading your card…' : 'Your card, or a screenshot from your insurance app showing your name and policy dates. A card on a family policy is fine if it shows your last name.'}
+              </Text>
+            )}
+            {v.insuranceStatus === 'requires_input' ? <Notice kind="error">{insuranceErrorMessage(v.insuranceError)}</Notice> : null}
+            <Button small variant={v.hasInsurance ? 'ghost' : 'primary'} title={v.hasInsurance ? 'Scan new card' : 'Scan card'} loading={uploading} onPress={addInsurance} />
           </Card>
 
           {error ? <Notice kind="error">{error}</Notice> : null}
@@ -277,7 +258,7 @@ export function DriverVerificationScreen({ then, verifyDone }: { then?: string; 
           ) : null}
 
           <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
-            Riders never see your license, selfie or insurance card, only the badge. Your insurance photo is visible to you and the Lift2Lift team.
+            Riders never see your license or insurance card, only the badge. We don't store your insurance card photo, only the insurer, expiry date and last 4 digits of the policy number.
             Lift2Lift doesn't run background checks.
           </Text>
         </>

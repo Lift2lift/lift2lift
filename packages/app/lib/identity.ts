@@ -26,6 +26,18 @@ export function identityErrorMessage(code: string | null) {
   }
 }
 
+/** Plain-language messages for why an insurance card needs another try. */
+export function insuranceErrorMessage(code: string | null) {
+  switch (code) {
+    case 'insurance_expired':
+      return 'That card has expired. Use your current card.';
+    case 'insurance_unreadable':
+      return "We couldn't read the name and expiry date. Try a clear photo of the front, or a screenshot from your insurance app.";
+    default:
+      return "The check didn't finish. Try again.";
+  }
+}
+
 /** Shown before the selfie check starts. Colorado treats face scans as biometric data, which needs consent. */
 export const BIOMETRIC_CONSENT =
   "To confirm the license is yours, we send your license photo and selfie to our provider, Amazon Web Services, which reads the license and compares the two faces. This creates a face scan, which Colorado law treats as biometric data. Lift2Lift keeps only the result, the name on your license and your selfie, which becomes your profile photo that other members can see. We don't store your license photo or the face scan.";

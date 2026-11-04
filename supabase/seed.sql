@@ -40,9 +40,9 @@ begin
 
   -- Both demo accounts have finished profiles and a verified ID. The demo
   -- driver's insurance was "reviewed" so they can host.
-  insert into public.driver_verifications (user_id, status, identity_status, identity_verified_at, submitted_at, reviewed_at)
-  values (v_driver, 'approved', 'verified', now(), now(), now()),
-         (v_rider, 'incomplete', 'verified', now(), null, null);
+  insert into public.driver_verifications (user_id, status, identity_status, identity_verified_at, submitted_at, reviewed_at, insurance_status, insurer, insurance_expires)
+  values (v_driver, 'approved', 'verified', now(), now(), now(), 'verified', 'Demo Insurance', current_date + 365),
+         (v_rider, 'incomplete', 'verified', now(), null, null, 'none', null, null);
 
   update public.profiles set
     gender = 'woman', discipline = 'ski', home_resort_id = 'abasin', school_year = 'Junior · Environmental Studies',
