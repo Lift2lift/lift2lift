@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, ChatMessage, DriverVerification, Gender, PendingReview, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
+import type { Api, BoardRide, ChatMessage, DriverVerification, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
 
 type BoardRow = {
   id: string;
@@ -397,6 +397,22 @@ export function createApi(supabase: SupabaseClient): Api {
     async giveBiometricConsent() {
       check(await supabase.rpc('give_biometric_consent'));
     },
+    async checkLicense(license, selfie) {
+      const { data, error } = await supabase.functions.invoke('license-check', {
+        body: { license: await photoBase64(license), selfie: await photoBase64(selfie) },
+      });
+      if (error) {
+        let message = "Couldn't check your license. Try again in a minute.";
+        try {
+          const body = await (error as { context?: Response }).context?.json();
+          if (body?.error) message = body.error;
+        } catch {
+          // keep the default message
+        }
+        throw new Error(message);
+      }
+      return data as { status: 'verified' | 'requires_input'; error?: string };
+    },
     async startIdentityCheck(platform) {
       const { data, error } = await supabase.functions.invoke('identity-start', { body: { platform } });
       if (error) {
@@ -496,4 +512,12 @@ export function createApi(supabase: SupabaseClient): Api {
 
   };
   return api;
+}
+
+async function photoBase64(photo: PickedPhoto) {
+  const buffer = photo.body instanceof ArrayBuffer ? photo.body : await photo.body.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
 }

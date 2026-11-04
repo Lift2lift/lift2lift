@@ -215,3 +215,15 @@ end $$;
 reset role;
 
 select 'ALL VERIFICATION TESTS PASSED' as result;
+
+-- license-check attempts: 5 a day, then blocked.
+do $$
+declare v_user uuid; i int;
+begin
+  insert into public.driver_verifications (user_id) select id from auth.users where id not in (select user_id from public.driver_verifications) limit 1 returning user_id into v_user;
+  if v_user is null then select user_id into v_user from public.driver_verifications limit 1; update public.driver_verifications set license_attempts = 0, license_attempts_day = null where user_id = v_user; end if;
+  for i in 1..5 loop
+    if not public.claim_license_attempt(v_user) then raise exception 'attempt % should pass', i; end if;
+  end loop;
+  if public.claim_license_attempt(v_user) then raise exception 'attempt 6 should be blocked'; end if;
+end $$;

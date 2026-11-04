@@ -1,3 +1,5 @@
+> **Draft note:** Stripe Identity is paused. The ID check currently runs on Amazon Web Services (Textract and Rekognition), which receives the license photo and selfie. Lift2Lift does not store the license photo. Sections below that name Stripe must be updated before publishing.
+
 # Lift2Lift Biometric Data Policy
 
 > **DRAFT. Have a lawyer review before publishing.** Colorado's Privacy Act, as amended by HB24-1130 (in effect since July 1, 2025), requires anyone who collects biometric identifiers to have a public written policy with a retention schedule, deletion guidelines and a security incident protocol. This draft describes how the Lift2Lift code works today. Fill in the bracketed parts, then post it on the website and link it from the ID check screen.

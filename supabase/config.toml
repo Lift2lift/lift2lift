@@ -63,6 +63,10 @@ enabled = true
 [functions.identity-start]
 verify_jwt = true
 
+# AWS license + selfie check (used instead of Stripe Identity for now).
+[functions.license-check]
+verify_jwt = true
+
 # Stripe calls this one; it checks the Stripe signature instead of a user token.
 [functions.identity-webhook]
 verify_jwt = false

@@ -8,7 +8,7 @@ import { BIOMETRIC_CONSENT, identityErrorMessage } from '../lib/identity';
 import { DISCIPLINE_LABEL, GENDER_OPTIONS, INTEREST_GROUPS, MAX_INTERESTS, MIN_INTERESTS, PROFILE_PROMPTS } from '../lib/interests';
 import { RESORTS } from '../lib/resorts';
 import { useTheme } from '../lib/theme';
-import type { DriverVerification, ProfileFields, ProfilePage } from '../lib/types';
+import type { DriverVerification, PickedPhoto, ProfileFields, ProfilePage } from '../lib/types';
 import { useApi, useAuth, useDevice, useNav } from '../providers';
 
 const STEPS = ['Photo', 'About you', 'Interests'] as const;
@@ -105,16 +105,32 @@ export function ProfileSetupScreen({ then, verifyDone }: { then?: string; verify
     return () => clearInterval(id);
   }, [polling, load]);
 
+  const [licensePhoto, setLicensePhoto] = useState<PickedPhoto | null>(null);
+  const [selfiePhoto, setSelfiePhoto] = useState<PickedPhoto | null>(null);
+
   const set = <K extends keyof ProfileFields>(k: K, value: ProfileFields[K]) => setFields((f) => ({ ...f, [k]: value }));
 
+  async function pick(which: 'license' | 'selfie') {
+    setError(null);
+    try {
+      const photo = await device.pickPhoto();
+      if (!photo) return;
+      if (which === 'license') setLicensePhoto(photo);
+      else setSelfiePhoto(photo);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function startIdCheck() {
+    if (!licensePhoto || !selfiePhoto) return;
     setError(null);
     setStarting(true);
     try {
       if (!v?.consented) await api.giveBiometricConsent();
-      const res = await api.startIdentityCheck(device.platform);
-      if (res.url) await device.openIdentityCheck(res.url);
-      setPolling(true);
+      await api.checkLicense(licensePhoto, selfiePhoto);
+      setLicensePhoto(null);
+      setSelfiePhoto(null);
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -215,8 +231,8 @@ export function ProfileSetupScreen({ then, verifyDone }: { then?: string; verify
             <>
               <Text style={{ color: t.ink, fontSize: 18, fontWeight: '800' }}>Take your profile photo</Text>
               <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>
-                Scan your driver's license, then take a selfie. Stripe checks the selfie matches your license, and it becomes your profile photo. Face the
-                camera in good light, no hat or sunglasses.
+                Add a photo of the front of your driver's license, then a selfie. We check the license isn't expired and the selfie matches it. The selfie becomes
+                your profile photo. Face the camera in good light, no hat or sunglasses.
               </Text>
               {v.identity === 'requires_input' ? <Notice kind="error">{identityErrorMessage(v.identityError)}</Notice> : null}
               {!v.consented ? (
@@ -224,18 +240,14 @@ export function ProfileSetupScreen({ then, verifyDone }: { then?: string; verify
                   <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>{BIOMETRIC_CONSENT}</Text>
                 </View>
               ) : null}
+              <Button small variant={licensePhoto ? 'ghost' : 'primary'} title={licensePhoto ? 'License added ✓' : 'Add license photo'} onPress={() => pick('license')} />
+              <Button small variant={selfiePhoto ? 'ghost' : 'primary'} title={selfiePhoto ? 'Selfie added ✓' : 'Add selfie'} onPress={() => pick('selfie')} />
               <Button
-                title={!v.consented ? 'Agree and take my selfie' : v.identity === 'requires_input' ? 'Try again' : 'Take my selfie'}
+                title={!v.consented ? 'Agree and check my license' : 'Check my license'}
                 loading={starting}
+                disabled={!licensePhoto || !selfiePhoto}
                 onPress={startIdCheck}
               />
-              {v.identity === 'pending' ? (
-                <Text style={{ textAlign: 'center' }}>
-                  <Text onPress={() => setPolling(true)} accessibilityRole="button" style={{ color: t.link, fontWeight: '600', fontSize: 14 }}>
-                    Already finished? Check again
-                  </Text>
-                </Text>
-              ) : null}
             </>
           )}
         </View>

@@ -1,4 +1,4 @@
-/** Plain-language messages for Stripe Identity's reasons a check needs another try. */
+/** Plain-language messages for the reasons a check needs another try. */
 export function identityErrorMessage(code: string | null) {
   switch (code) {
     case 'selfie_face_mismatch':
@@ -14,7 +14,7 @@ export function identityErrorMessage(code: string | null) {
       return "Use a driver's license for this check.";
     case 'document_manipulated':
     case 'document_unverified_other':
-      return "Stripe couldn't verify that license. Try again with a clear, glare-free scan.";
+      return "We couldn't read that license. Try again with a clear, glare-free photo of the front.";
     case 'under_supported_age':
       return 'You need to be 18 or older to drive on Lift2Lift.';
     case 'consent_declined':
@@ -28,4 +28,4 @@ export function identityErrorMessage(code: string | null) {
 
 /** Shown before the selfie check starts. Colorado treats face scans as biometric data, which needs consent. */
 export const BIOMETRIC_CONSENT =
-  "To confirm the license is yours, our ID partner Stripe compares a live selfie with your license photo. This creates a face scan, which Colorado law treats as biometric data. Stripe does the comparison: Lift2Lift never receives the face scan or your license images. When the check passes, your selfie becomes your profile photo, which other Lift2Lift members can see. Then we ask Stripe to delete your license images, selfie and face scan, and keep only the result and the name on your license.";
+  "To confirm the license is yours, we send your license photo and selfie to our provider, Amazon Web Services, which reads the license and compares the two faces. This creates a face scan, which Colorado law treats as biometric data. Lift2Lift keeps only the result, the name on your license and your selfie, which becomes your profile photo that other members can see. We don't store your license photo or the face scan.";

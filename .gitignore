@@ -12,3 +12,4 @@ supabase/.branches/
 .env*
 # Keep the example env files in git
 !.env*.example
+*.tsbuildinfo

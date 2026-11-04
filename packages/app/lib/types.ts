@@ -249,6 +249,8 @@ export interface Api {
   getDriverVerification(options?: { withPhotos?: boolean }): Promise<DriverVerification>;
   uploadDriverDoc(doc: DriverDoc, photo: PickedPhoto): Promise<DriverVerification>;
   giveBiometricConsent(): Promise<void>;
+  /** Reads the license and matches the selfie to its photo. The result arrives in the response. */
+  checkLicense(license: PickedPhoto, selfie: PickedPhoto): Promise<{ status: 'verified' | 'requires_input'; error?: string }>;
   /** Starts or resumes the Stripe ID check. Returns the hosted page to open, unless it's already processing or done. */
   startIdentityCheck(platform: DeviceServices['platform']): Promise<{ url?: string; status: 'pending' | 'processing' | 'verified' }>;
 
