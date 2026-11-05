@@ -230,11 +230,11 @@ reset role;
 select 'ALL VERIFICATION TESTS PASSED' as result;
 
 -- Expired insurance stops hosting even though the status row hasn't refreshed.
-update public.driver_verifications set insurance_expires = current_date - 1 where user_id = '66666666-6666-4666-8666-666666666666';
+update public.driver_verifications set insurance_expires = (now() at time zone 'America/Denver')::date - 1 where user_id = '66666666-6666-4666-8666-666666666666';
 do $$ begin
   assert not public.is_verified_driver('66666666-6666-4666-8666-666666666666'), 'expired insurance blocks hosting';
 end $$;
-update public.driver_verifications set insurance_expires = current_date + 30 where user_id = '66666666-6666-4666-8666-666666666666';
+update public.driver_verifications set insurance_expires = (now() at time zone 'America/Denver')::date + 30 where user_id = '66666666-6666-4666-8666-666666666666';
 
 -- license-check attempts: 5 a day, then blocked.
 do $$
