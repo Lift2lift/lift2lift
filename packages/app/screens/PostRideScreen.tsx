@@ -2,35 +2,45 @@ import { useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { SetupModal } from '../components/SetupModal';
-import { Button, Chip, ChipRow, Field, FormScreen, Heading, Label, Notice } from '../components/ui';
+import { DayPicker } from '../components/Pickers';
+import { Button, Chip, ChipRow, Field, FormScreen, Heading, Label, Loading, Notice } from '../components/ui';
 import { GEAR_OPTIONS, PICKUP_SPOTS } from '../lib/config';
-import { clockFromHHMM, dayLabel, driveText, nextDays, nextSaturday, toISO } from '../lib/dates';
+import { addDays, clockFromHHMM, dayLabel, driveText, isoDay, longDay, nextSaturday, toISO } from '../lib/dates';
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER, earliestDeparture, MAX_PASSENGERS, maxGasPerRider, mileageCents, tripGasCap } from '../lib/rules';
 import { oneWayShare, TRIP_LABEL } from '../lib/trips';
-import type { TripType } from '../lib/types';
+import type { EditableRide, TripType } from '../lib/types';
 import { useTheme } from '../lib/theme';
 import { useForecast } from '../lib/useForecast';
 import { canHost, type DriverVerification } from '../lib/types';
-import { useApi, useAuth, useNav } from '../providers';
+import { useApi, useAuth, useMyRides, useNav } from '../providers';
 
 const RETURN_TIMES = ['12:00', '13:00', '14:00', '15:00', '15:30', '16:00', '16:30', '17:00', '18:00', '20:00'];
 const TIMES = ['05:00', '05:30', '06:00', '06:30', '07:00', '07:30', '08:00', '08:30', '09:00', '12:00', '15:00', '16:00'];
 const GAS_STEP = 5;
 const SEAT_OPTIONS = Array.from({ length: MAX_PASSENGERS }, (_, i) => i + 1);
 const NEARBY = 12; // closest mountains shown before "All mountains"
+const DAYS_AHEAD = 60; // how far out a ride can be posted
+const pad = (n: number) => String(n).padStart(2, '0');
+const hhmm = (iso: string) => {
+  const d = new Date(iso);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
-export function PostRideScreen({ initialResort }: { initialResort?: string }) {
+/** Post a ride, or edit one you posted (`editRideId`). */
+export function PostRideScreen({ initialResort, editRideId }: { initialResort?: string; editRideId?: string }) {
   const t = useTheme();
   const api = useApi();
   const nav = useNav();
   const { session } = useAuth();
   const { forecast } = useForecast();
-  const days = useMemo(() => nextDays(14), []);
+  const { refresh: refreshMyRides } = useMyRides();
+  const today = isoDay(new Date());
+  const lastDay = isoDay(addDays(new Date(), DAYS_AHEAD));
 
   const [resortId, setResortId] = useState(initialResort && RESORT_BY_ID[initialResort] ? initialResort : '');
-  const [day, setDay] = useState(days.includes(nextSaturday()) ? nextSaturday() : days[1]);
+  const [day, setDay] = useState(nextSaturday());
   const [tripType, setTripType] = useState<TripType>('round_trip');
   const [time, setTime] = useState('06:30');
   const [returnTime, setReturnTime] = useState('16:00');
@@ -44,6 +54,36 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
   const [allMountains, setAllMountains] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Editing: load the ride, then lock what booked riders signed up for.
+  const [original, setOriginal] = useState<EditableRide | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  useEffect(() => {
+    if (!editRideId) return;
+    api
+      .rideForEdit(editRideId)
+      .then((r) => {
+        if (!r) return setEditError("This ride can't be edited. It may have been cancelled, or it isn't yours.");
+        setOriginal(r);
+        setResortId(r.resortId);
+        setDay(isoDay(new Date(r.departAt)));
+        setTripType(r.tripType);
+        setTime(hhmm(r.departAt));
+        if (r.returnAt) setReturnTime(hhmm(r.returnAt));
+        setReturnMeet(r.returnMeet);
+        setLeaveFrom(r.leaveFrom);
+        setSeats(r.seatsTotal);
+        setGas(r.gasPerRider);
+        setGear(r.gear || GEAR_OPTIONS[0]);
+        setContact(r.contact);
+        setNotes(r.notes);
+      })
+      .catch((e: Error) => setEditError(e.message));
+  }, [api, editRideId]);
+  const editing = !!editRideId;
+  const booked = !!original && original.riders > 0;
+  const minSeats = original ? Math.max(1, original.seatsTakenTo, original.seatsTakenFrom) : 1;
 
   // First time hosting? Drivers need a finished profile and insurance on file.
   const [verification, setVerification] = useState<DriverVerification | null>(null);
@@ -59,7 +99,7 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
       .catch(() => {})
       .finally(() => setVerificationChecked(true));
   }, [api, session]);
-  const needsVerification = verificationChecked && (!profileReady || !canHost(verification));
+  const needsVerification = !editing && verificationChecked && (!profileReady || !canHost(verification));
 
   // Days this person already drives or rides (one ride per person per day).
   const [busyDays, setBusyDays] = useState<Set<string>>(new Set());
@@ -68,31 +108,38 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
     if (!me) return;
     api
       .listRides()
-      .then((rides) => setBusyDays(new Set(rides.filter((r) => r.driverId === me || r.riderIds.includes(me)).map((r) => r.rideDate))))
+      .then((rides) => setBusyDays(new Set(rides.filter((r) => r.id !== editRideId && (r.driverId === me || r.riderIds.includes(me))).map((r) => r.rideDate))))
       .catch(() => {});
-  }, [api, session?.userId]);
+  }, [api, session?.userId, editRideId]);
 
   const wx = resortId ? forecastFor(forecast, resortId, day) : null;
 
   // Departures have to be at least 2 hours out so riders can book ahead.
   const earliest = earliestDeparture();
-  const validTimes = TIMES.filter((tm) => new Date(toISO(day, tm)) >= earliest);
+  // When editing, the current time stays available even inside the 2-hour window (it isn't changing).
+  const keepTime = original && day === isoDay(new Date(original.departAt)) ? hhmm(original.departAt) : null;
+  const validTimes = [...new Set([...TIMES, ...(keepTime ? [keepTime] : [])])]
+    .sort()
+    .filter((tm) => tm === keepTime || new Date(toISO(day, tm)) >= earliest);
   const timeValue = validTimes.includes(time) ? time : validTimes[0];
 
   // Colorado gas cap for this trip, and the most each rider can be asked for.
   const sampleDepart = toISO(day, timeValue ?? '06:30');
   const cap = resortId ? tripGasCap(resortId, sampleDepart, tripType) : 0;
   const maxPer = resortId ? maxGasPerRider(resortId, sampleDepart, seats, tripType) : 0;
-  const validReturns = RETURN_TIMES.filter((tm) => tm > (timeValue ?? '00:00'));
+  const keepReturn = original?.returnAt ? hhmm(original.returnAt) : null;
+  const validReturns = [...new Set([...RETURN_TIMES, ...(keepReturn ? [keepReturn] : [])])].sort().filter((tm) => tm > (timeValue ?? '00:00'));
   const returnValue = validReturns.includes(returnTime) ? returnTime : validReturns[validReturns.length - 1];
   const gasValue = resortId ? Math.min(gas, maxPer) : gas;
   const gasOptions = useMemo(() => {
     if (!resortId) return [0, 5, 10, 15, 20];
     const opts: number[] = [];
-    for (let g = 0; g <= maxPer; g += GAS_STEP) opts.push(g);
-    if (maxPer % GAS_STEP !== 0) opts.push(maxPer);
+    // Once riders are booked, gas money can only go down.
+    const top = booked && original ? Math.min(maxPer, original.gasPerRider) : maxPer;
+    for (let g = 0; g <= top; g += GAS_STEP) opts.push(g);
+    if (top % GAS_STEP !== 0) opts.push(top);
     return opts;
-  }, [resortId, maxPer]);
+  }, [resortId, maxPer, booked, original]);
   const busy = busyDays.has(day);
 
   async function submit() {
@@ -101,13 +148,13 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
     if (busy) return setError('You already have a ride that day. It\'s one ride per person per day, so pick another day.');
     if (!timeValue) return setError('Rides have to leave at least 2 hours from now. Pick a later day.');
     const departAt = toISO(day, timeValue);
-    if (new Date(departAt) < earliestDeparture()) return setError('Rides have to leave at least 2 hours from now so riders can book ahead.');
+    if (timeValue !== keepTime && new Date(departAt) < earliestDeparture()) return setError('Rides have to leave at least 2 hours from now so riders can book ahead.');
     if (!leaveFrom.trim()) return setError("Add where you're leaving from so riders know where to meet.");
     if (!contact.trim()) return setError('Add a phone number or handle so riders can reach you.');
     if (tripType === 'round_trip' && !returnValue) return setError('Pick a time for the ride back.');
     setSaving(true);
     try {
-      await api.postRide({
+      const ride = {
         resortId,
         tripType,
         departAt,
@@ -119,7 +166,18 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
         gear,
         notes: notes.trim().slice(0, 280),
         contact: contact.trim().slice(0, 60),
-      });
+      };
+      if (editRideId) {
+        // Keep the exact original times when the picker didn't change them.
+        if (original && timeValue === keepTime) ride.departAt = original.departAt;
+        if (original?.returnAt && returnValue === keepReturn && ride.returnAt) ride.returnAt = original.returnAt;
+        await api.updateRide(editRideId, ride);
+        await refreshMyRides();
+        nav.replace('/rides', { saved: editRideId });
+        return;
+      }
+      await api.postRide(ride);
+      refreshMyRides();
       nav.replace('/', { resort: resortId, day });
     } catch (e) {
       setError((e as Error).message);
@@ -131,25 +189,60 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
     <FormScreen header={<AppHeader />}>
       <SetupModal visible={needsVerification} role="driver" profileReady={profileReady} onClose={() => nav.back()} />
 
-      <Heading title="Post a ride" subtitle="Riders see this on the board. Only people who claim a seat see how to reach you." />
+      {editing ? (
+        <Heading
+          title="Edit ride"
+          subtitle={booked ? `${original!.riders} ${original!.riders === 1 ? 'rider is' : 'riders are'} booked. They'll see your changes in the ride chat and get a notification.` : 'Nobody has booked yet, so you can change anything.'}
+        />
+      ) : (
+        <Heading title="Post a ride" subtitle="Riders see this on the board. Only people who claim a seat see how to reach you." />
+      )}
+      {editError ? (
+        <>
+          <Notice kind="error">{editError}</Notice>
+          <Button variant="ghost" title="Back to Your Rides" onPress={() => nav.replace('/rides')} />
+        </>
+      ) : editing && !original ? (
+        <Loading label="Loading your ride…" />
+      ) : (
+      <>
 
       <View style={{ gap: 8 }}>
         <Label>Mountain</Label>
+        {booked ? (
+          <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>
+            {RESORT_BY_ID[resortId]?.name}
+            <Text style={{ color: t.muted, fontSize: 13, fontWeight: '500' }}>{'  Riders booked this mountain. To go somewhere else, cancel and post a new ride.'}</Text>
+          </Text>
+        ) : (
         <ChipRow wrap>
           {(allMountains ? RESORTS : RESORTS.filter((r, i) => i < NEARBY || r.id === resortId)).map((r) => (
             <Chip key={r.id} label={`${r.name} · ${driveText(r.driveMinutes)}`} selected={resortId === r.id} onPress={() => setResortId(r.id)} />
           ))}
           {!allMountains ? <Chip label={`All ${RESORTS.length} mountains…`} onPress={() => setAllMountains(true)} /> : null}
         </ChipRow>
+        )}
       </View>
 
       <View style={{ gap: 8 }}>
         <Label>Day</Label>
-        <ChipRow>
-          {days.map((d) => (
-            <Chip key={d} label={busyDays.has(d) ? `${dayLabel(d)} · booked` : dayLabel(d)} selected={day === d} onPress={() => setDay(d)} />
-          ))}
-        </ChipRow>
+        {booked ? (
+          <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>
+            {longDay(day)}
+            <Text style={{ color: t.muted, fontSize: 13, fontWeight: '500' }}>{'  Riders are booked for this day. You can still change the time.'}</Text>
+          </Text>
+        ) : (
+          <View style={{ alignSelf: 'flex-start' }}>
+            <DayPicker
+              value={day}
+              onChange={setDay}
+              minDay={today}
+              maxDay={lastDay}
+              disabled={busyDays}
+              disabledNote="Faded days are ones you already have a ride. It's one ride per person per day."
+            />
+          </View>
+        )}
         {busy ? (
           <Text style={{ color: t.danger, fontSize: 13, fontWeight: '600' }}>
             You already have a ride {dayLabel(day).toLowerCase() === 'today' ? 'today' : `on ${dayLabel(day)}`}. It's one ride per person per day.
@@ -165,7 +258,7 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
       <View style={{ gap: 8 }}>
         <Label>Trip</Label>
         <ChipRow wrap>
-          {(['round_trip', 'to_mountain', 'from_mountain'] as TripType[]).map((tt) => (
+          {(['round_trip', 'to_mountain', 'from_mountain'] as TripType[]).filter((tt) => !booked || tt === tripType).map((tt) => (
             <Chip key={tt} label={TRIP_LABEL[tt]} selected={tripType === tt} onPress={() => setTripType(tt)} />
           ))}
         </ChipRow>
@@ -229,14 +322,16 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
       <View style={{ gap: 8 }}>
         <Label>Open seats</Label>
         <ChipRow wrap>
-          {SEAT_OPTIONS.map((n) => (
+          {SEAT_OPTIONS.filter((n) => n >= minSeats).map((n) => (
             <Chip key={n} label={String(n)} selected={seats === n} onPress={() => setSeats(n)} />
           ))}
         </ChipRow>
+        {booked && minSeats > 1 ? <Text style={{ color: t.muted, fontSize: 13 }}>{minSeats} seats are booked, so you can't go lower than that.</Text> : null}
       </View>
 
       <View style={{ gap: 8 }}>
         <Label>Gas money per rider</Label>
+        {booked ? <Text style={{ color: t.muted, fontSize: 13 }}>Riders agreed to ${original!.gasPerRider}, so you can lower it but not raise it.</Text> : null}
         <ChipRow wrap>
           {gasOptions.map((g) => (
             <Chip key={g} label={g === 0 ? 'Free' : `$${g}`} selected={gasValue === g} onPress={() => setGas(g)} />
@@ -273,9 +368,45 @@ export function PostRideScreen({ initialResort }: { initialResort?: string }) {
       {error ? <Notice kind="error">{error}</Notice> : null}
 
       <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        <Button variant="ghost" title="Cancel" onPress={() => nav.back()} />
-        <Button title="Post ride" onPress={submit} loading={saving} disabled={busy || needsVerification} />
+        <Button variant="ghost" title={editing ? 'Discard changes' : 'Cancel'} onPress={() => nav.back()} />
+        <Button title={editing ? 'Save changes' : 'Post ride'} onPress={submit} loading={saving} disabled={busy || needsVerification} />
       </View>
+
+      {editing ? (
+        confirmCancel ? (
+          <View style={{ gap: 8 }}>
+            <Notice kind="error">{booked ? 'Cancel this ride for everyone? Your riders get a notification and will need another way up.' : 'Cancel this ride? It comes off the board.'}</Notice>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Button small variant="ghost" title="Keep it" onPress={() => setConfirmCancel(false)} />
+              <Button
+                small
+                variant="danger"
+                title="Cancel ride"
+                loading={saving}
+                onPress={async () => {
+                  setSaving(true);
+                  try {
+                    await api.cancelRide(editRideId!);
+                    await refreshMyRides();
+                    nav.replace('/rides');
+                  } catch (e) {
+                    setError((e as Error).message);
+                    setSaving(false);
+                  }
+                }}
+              />
+            </View>
+          </View>
+        ) : (
+          <Text style={{ textAlign: 'center' }}>
+            <Text onPress={() => setConfirmCancel(true)} accessibilityRole="button" style={{ color: t.danger, fontSize: 14, fontWeight: '700' }}>
+              Cancel this ride
+            </Text>
+          </Text>
+        )
+      ) : null}
+      </>
+      )}
     </FormScreen>
   );
 }

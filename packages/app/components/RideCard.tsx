@@ -9,7 +9,7 @@ import { Avatar } from './Avatar';
 import { RatingBadge } from './Stars';
 import { useTheme } from '../lib/theme';
 import type { BoardRide, Forecast, Leg, SeatLegs } from '../lib/types';
-import { useApi, useAuth, useNav } from '../providers';
+import { useApi, useAuth, useMyRides, useNav } from '../providers';
 import { Button, Card, TextLink } from './ui';
 
 export function RideCard({
@@ -21,8 +21,11 @@ export function RideCard({
   hideResort,
   profileReady,
   onNeedsSetup,
+  friendIds,
 }: {
   ride: BoardRide;
+  /** The viewer's friends, to flag rides they're driving or riding in. */
+  friendIds?: Set<string>;
   /** On a mountain's own page, the card doesn't repeat the mountain name. */
   hideResort?: boolean;
   /** Viewer has finished their profile (needed to call shotgun). */
@@ -37,6 +40,7 @@ export function RideCard({
   const t = useTheme();
   const api = useApi();
   const nav = useNav();
+  const { refresh: refreshMyRides } = useMyRides();
   const { session } = useAuth();
   const me = session?.userId;
   const [busy, setBusy] = useState(false);
@@ -62,6 +66,7 @@ export function RideCard({
   const allFull = legs.every((leg) => seatsOpen(ride, leg) === 0);
   const myLegs = riding ? ride.riderLegs[ride.riderIds.indexOf(me!)] ?? 'both' : null;
   const firstName = ride.driverName.split(' ')[0] || 'the driver';
+  const friendsRiding = friendIds ? ride.riderIds.filter((id) => friendIds.has(id)).length : 0;
   // Booking: pick legs (round trips), then confirm one way if it's one way.
   const [sheet, setSheet] = useState<null | 'legs' | { oneWay: SeatLegs; leg: Leg }>(null);
   const book = (l: SeatLegs) => {
@@ -80,6 +85,7 @@ export function RideCard({
       await action();
       onMessage(success, 'success');
       onChanged();
+      refreshMyRides(); // so Your Rides shows it right away
     } catch (e) {
       onMessage((e as Error).message, 'error');
       onChanged();
@@ -107,11 +113,14 @@ export function RideCard({
           variant="danger"
           title="Yes, cancel"
           loading={busy}
-          onPress={() => run(() => api.cancelRide(ride.id), 'Ride cancelled. Let your riders know.')}
+          onPress={() => run(() => api.cancelRide(ride.id), 'Ride cancelled. Anyone booked gets a notification.')}
         />
       </View>
     ) : (
-      <Button small variant="danger" title="Cancel ride" onPress={() => setConfirmCancel(true)} />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Button small variant="ghost" title="Edit" onPress={() => nav.push('/post', { edit: ride.id })} />
+        <Button small variant="danger" title="Cancel ride" onPress={() => setConfirmCancel(true)} />
+      </View>
     );
   } else if (riding) {
     action = (
@@ -247,6 +256,16 @@ export function RideCard({
               {TRIP_LABEL[ride.tripType]}
             </Text>
           </View>
+          {friendIds?.has(ride.driverId) ? (
+            <View style={{ backgroundColor: t.accent, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+              <Text style={{ color: t.accentInk, fontSize: 12, fontWeight: '800' }}>Your friend is driving</Text>
+            </View>
+          ) : null}
+          {friendsRiding ? (
+            <Text style={{ color: t.ink, fontSize: 12, fontWeight: '800' }}>
+              {friendsRiding === 1 ? `${firstOf(ride.riderNames[ride.riderIds.findIndex((id) => friendIds!.has(id))])} is riding` : `${friendsRiding} friends riding`}
+            </Text>
+          ) : null}
           {myLegs ? (
             <Text style={{ color: t.ok, fontSize: 12, fontWeight: '800' }}>
               ✓ You're booked{ride.tripType === 'round_trip' ? (myLegs === 'both' ? ' both ways' : myLegs === 'to' ? ' for the ride up' : ' for the ride down') : ''}
@@ -426,3 +445,5 @@ function WeatherChip({ wx }: { wx: ReturnType<typeof forecastFor> }) {
     </View>
   );
 }
+
+const firstOf = (name: string | undefined) => (name ?? '').split(' ')[0] || 'A friend';

@@ -25,6 +25,7 @@ function RootStack() {
         <Stack.Screen name="profile/setup" />
         <Stack.Screen name="u" />
         <Stack.Screen name="review" />
+        <Stack.Screen name="friends" />
         <Stack.Screen name="rides" options={{ gestureEnabled: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>

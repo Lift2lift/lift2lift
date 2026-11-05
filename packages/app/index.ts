@@ -15,6 +15,7 @@ export { ProfileScreen } from './screens/ProfileScreen';
 export { ProfileSetupScreen } from './screens/ProfileSetupScreen';
 export { ReviewScreen } from './screens/ReviewScreen';
 export { YourRidesScreen } from './screens/YourRidesScreen';
+export { FriendsScreen } from './screens/FriendsScreen';
 export { Stars, StarInput, RatingBadge } from './components/Stars';
 export { Avatar, RING } from './components/Avatar';
 export * from './lib/interests';
