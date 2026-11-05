@@ -6,7 +6,7 @@ import { Suspense } from 'react';
 
 function Screen() {
   const q = useSearchParams();
-  return <RideBoardScreen initialResort={q.get('resort') ?? undefined} initialDay={q.get('day') ?? undefined} initialLeg={q.get('leg') ?? undefined} />;
+  return <RideBoardScreen initialResort={q.get('resort') ?? undefined} initialDay={q.get('day') ?? undefined} initialLeg={q.get('leg') ?? undefined} initialPass={q.get('pass') ?? undefined} />;
 }
 
 export default function Page() {

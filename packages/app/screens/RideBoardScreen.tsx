@@ -7,6 +7,7 @@ import { SetupModal } from '../components/SetupModal';
 import { DayPicker, OptionPicker } from '../components/Pickers';
 import { Button, Chip, Loading, Notice } from '../components/ui';
 import { addDays, clock, dayLabel, driveText, isoDay, longDay } from '../lib/dates';
+import { isPassFilter, PASS_FILTERS, PASS_LABEL, PASS_NOTES, PASS_SEASON, passesFor, passMatches, type PassFilter } from '../lib/passes';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
@@ -16,7 +17,7 @@ import { useForecast } from '../lib/useForecast';
 import { useApi, useAuth, useNav } from '../providers';
 
 /** One mountain in the list: name, drive, snow, and how many rides and seats. */
-function MountainRow({ name, sub, rides, seats, snow, next, onPress }: { name: string; sub: string; rides: number; seats: number; snow: number; next?: string; onPress: () => void }) {
+function MountainRow({ name, sub, rides, seats, snow, next, passes, onPress }: { name: string; sub: string; rides: number; seats: number; snow: number; next?: string; passes: string[]; onPress: () => void }) {
   const t = useTheme();
   const has = rides > 0;
   return (
@@ -37,7 +38,12 @@ function MountainRow({ name, sub, rides, seats, snow, next, onPress }: { name: s
       })}
     >
       <View style={{ flex: 1, gap: 3, minWidth: 0 }}>
-        <Text style={{ color: t.ink, fontSize: 19, fontWeight: '900', textTransform: 'uppercase' }}>{name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Text style={{ color: t.ink, fontSize: 19, fontWeight: '900', textTransform: 'uppercase' }}>{name}</Text>
+          {passes.map((p) => (
+            <PassTag key={p} label={p} />
+          ))}
+        </View>
         <Text style={{ color: t.muted, fontSize: 13 }}>
           {sub}
           {snow >= 0.5 ? <Text style={{ color: t.snow, fontWeight: '700' }}>{`  ❄ ${snow}"`}</Text> : null}
@@ -63,7 +69,28 @@ function MountainRow({ name, sub, rides, seats, snow, next, onPress }: { name: s
   );
 }
 
-export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { initialResort?: string; initialDay?: string; initialLeg?: string }) {
+/** Small outlined tag with a pass name. */
+function PassTag({ label }: { label: string }) {
+  const t = useTheme();
+  return (
+    <View style={{ borderWidth: 1, borderColor: t.muted, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 }}>
+      <Text style={{ color: t.muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>{label.toUpperCase()}</Text>
+    </View>
+  );
+}
+
+export function RideBoardScreen({
+  initialResort,
+  initialDay,
+  initialLeg,
+  initialPass,
+}: {
+  initialResort?: string;
+  initialDay?: string;
+  initialLeg?: string;
+  /** Ski pass filter: ikon, epic, indy, mc or none. */
+  initialPass?: string;
+}) {
   const t = useTheme();
   const api = useApi();
   const nav = useNav();
@@ -91,6 +118,7 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
   const [legFilter, setLegFilter] = useState<Leg | null>(initialLeg === 'to' || initialLeg === 'from' ? initialLeg : null);
   const [showEmpty, setShowEmpty] = useState(false);
   const [sort, setSort] = useState<RideSort>('soonest');
+  const [pass, setPass] = useState<PassFilter>(isPassFilter(initialPass) ? initialPass : 'any');
   const [mountainSort, setMountainSort] = useState<MountainSort>('drive');
   // Long lists load in pages so a busy weekend stays quick to scroll.
   const [limit, setLimit] = useState(PAGE);
@@ -147,11 +175,12 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
   const dayCounts = useMemo(() => {
     const c: Record<string, number> = {};
     for (const r of inResort) {
+      if (!resort && !passMatches(r.resortId, pass)) continue;
       const d = isoDay(new Date(r.departAt));
       c[d] = (c[d] ?? 0) + 1;
     }
     return c;
-  }, [rides, resort]);
+  }, [rides, resort, pass]);
   const shown = sortRides(
     inResort.filter(
       (r) =>
@@ -166,7 +195,7 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
   const grouped = day === 'all' && (sort === 'soonest' || sort === 'latest');
 
   // Mountain list: counts for the selected day
-  const byResort = RESORTS.map((m) => {
+  const byResort = RESORTS.filter((m) => passMatches(m.id, pass)).map((m) => {
     const rs = all.filter((r) => r.resortId === m.id && onDay(r));
     return { resort: m, rides: rs.length, seats: seatsLeft(rs) };
   });
@@ -183,7 +212,7 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
     );
   const withoutRides = byResort.filter((x) => x.rides === 0);
   const myRides = all.filter((r) => isMine(r) && onDay(r));
-  const dayRides = all.filter(onDay);
+  const dayRides = all.filter((r) => onDay(r) && passMatches(r.resortId, pass));
 
   // Snow for a mountain: that day's, or the biggest upcoming day when "All upcoming".
   const snowFor = (id: string) => {
@@ -194,7 +223,8 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
     return f.filter((d) => d.date >= today).reduce<(typeof f)[number] | null>((best, d) => (!best || d.snowIn > best.snowIn ? d : best), null);
   };
 
-  const openResort = (id: string) => nav.push('/', { resort: id, ...(day !== 'all' ? { day } : {}) });
+  const keep = () => ({ ...(day !== 'all' ? { day } : {}), ...(pass !== 'any' ? { pass } : {}) });
+  const openResort = (id: string) => nav.push('/', { resort: id, ...keep() });
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
@@ -216,12 +246,18 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
         <View style={{ width: '100%', maxWidth: 960, alignSelf: 'center', gap: 14 }}>
           {resort ? (
             <View style={{ gap: 6 }}>
-              <Pressable onPress={() => nav.replace('/', day !== 'all' ? { day } : undefined)} accessibilityRole="button" style={{ alignSelf: 'flex-start', paddingVertical: 4 }}>
+              <Pressable onPress={() => nav.replace('/', keep())} accessibilityRole="button" style={{ alignSelf: 'flex-start', paddingVertical: 4 }}>
                 <Text style={{ color: t.link, fontSize: 15, fontWeight: '700' }}>‹ All mountains</Text>
               </Pressable>
               <Text style={{ color: t.ink, fontSize: 30, fontWeight: '900', textTransform: 'uppercase' }}>{RESORT_BY_ID[resort].name}</Text>
               <Text style={{ color: t.muted, fontSize: 14 }}>
                 {RESORT_BY_ID[resort].region} · {driveText(RESORT_BY_ID[resort].driveMinutes)} from Boulder
+              </Text>
+              <Text style={{ color: t.ink, fontSize: 14, fontWeight: '700' }}>
+                {passesFor(resort).length
+                  ? `On ${passesFor(resort).map((p) => PASS_LABEL[p]).join(' and ')} for ${PASS_SEASON}`
+                  : `Not on Ikon, Epic, Indy or Mountain Collective for ${PASS_SEASON}`}
+                {PASS_NOTES[resort] ? <Text style={{ color: t.muted, fontWeight: '400' }}>{`. ${PASS_NOTES[resort]}`}</Text> : null}
               </Text>
             </View>
           ) : (
@@ -233,7 +269,10 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
             {resort ? (
               <OptionPicker label="Sort" title="Sort rides" value={sort} onChange={setSort} options={RIDE_SORTS} />
             ) : (
-              <OptionPicker label="Sort" title="Sort mountains" value={mountainSort} onChange={setMountainSort} options={MOUNTAIN_SORTS} />
+              <>
+                <OptionPicker label="Pass" title={`Your ski pass (${PASS_SEASON})`} value={pass} onChange={setPass} options={PASS_FILTERS} />
+                <OptionPicker label="Sort" title="Sort mountains" value={mountainSort} onChange={setMountainSort} options={MOUNTAIN_SORTS} />
+              </>
             )}
           </View>
 
@@ -305,7 +344,7 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
 
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
                 <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>
-                  {day === 'all' ? 'MOUNTAINS WITH RIDES' : `MOUNTAINS WITH RIDES ${dayLabel(day).toUpperCase()}`}
+                  {`${pass === 'any' ? '' : pass === 'none' ? 'INDEPENDENT ' : `${PASS_LABEL[pass].toUpperCase()} `}MOUNTAINS WITH RIDES${day === 'all' ? '' : ` ${dayLabel(day).toUpperCase()}`}`}
                 </Text>
                 <Text style={{ color: t.muted, fontSize: 13 }}>
                   {dayRides.length} ride{dayRides.length === 1 ? '' : 's'} · {seatsLeft(dayRides)} open seat{seatsLeft(dayRides) === 1 ? '' : 's'}
@@ -314,9 +353,11 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
 
               {withRides.length === 0 ? (
                 <View style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: t.line, borderRadius: 16, padding: 28, alignItems: 'center', gap: 10 }}>
-                  <Text style={{ color: t.ink, fontSize: 22, fontWeight: '900', textTransform: 'uppercase' }}>{all.length ? 'No rides that day' : 'The board is empty'}</Text>
+                  <Text style={{ color: t.ink, fontSize: 22, fontWeight: '900', textTransform: 'uppercase' }}>{!all.length ? 'The board is empty' : pass !== 'any' ? 'No rides on your pass' : 'No rides that day'}</Text>
                   <Text style={{ color: t.muted, textAlign: 'center', maxWidth: 420, lineHeight: 21 }}>
-                    {all.length ? 'Try another day, or post the ride yourself.' : "No one has posted a ride yet. If you're driving up, post your open seats and riders will reach out."}
+                    {all.length && pass !== 'any'
+                      ? `Nothing to ${pass === 'none' ? 'mountains off the big passes' : `${PASS_LABEL[pass]} mountains`}${day === 'all' ? ' yet' : ' that day'}. Try another day or Any pass, or post the ride yourself.`
+                      : all.length ? 'Try another day, or post the ride yourself.' : "No one has posted a ride yet. If you're driving up, post your open seats and riders will reach out."}
                   </Text>
                   <Button title="+ Post a ride" onPress={() => nav.push('/post')} />
                 </View>
@@ -326,6 +367,7 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
                     <View key={x.resort.id} style={{ flexGrow: 1, flexBasis: 300, maxWidth: '100%' }}>
                       <MountainRow
                         name={x.resort.name}
+                        passes={passesFor(x.resort.id).map((p) => PASS_LABEL[p])}
                         sub={`${x.resort.region} · ${driveText(x.resort.driveMinutes)}`}
                         rides={x.rides}
                         seats={x.seats}
@@ -349,7 +391,7 @@ export function RideBoardScreen({ initialResort, initialDay, initialLeg }: { ini
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                       {withoutRides.map((x) => (
                         <View key={x.resort.id} style={{ flexGrow: 1, flexBasis: 300, maxWidth: '100%' }}>
-                          <MountainRow name={x.resort.name} sub={`${x.resort.region} · ${driveText(x.resort.driveMinutes)}`} rides={0} seats={0} snow={snowFor(x.resort.id)?.snowIn ?? 0} onPress={() => openResort(x.resort.id)} />
+                          <MountainRow name={x.resort.name} passes={passesFor(x.resort.id).map((p) => PASS_LABEL[p])} sub={`${x.resort.region} · ${driveText(x.resort.driveMinutes)}`} rides={0} seats={0} snow={snowFor(x.resort.id)?.snowIn ?? 0} onPress={() => openResort(x.resort.id)} />
                         </View>
                       ))}
                     </View>

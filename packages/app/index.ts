@@ -3,6 +3,7 @@ export { createApi } from './lib/api';
 export { RESORTS, RESORT_BY_ID } from './lib/resorts';
 export * from './lib/rules';
 export * from './lib/trips';
+export * from './lib/passes';
 export { isoDay } from './lib/dates';
 export { useTheme } from './lib/theme';
 export { AppProviders, AUTH_ROUTES, PUBLIC_ROUTES, useApi, useAuth, useDevice, useMyRides, useNav, withQuery, type Nav, type Route } from './providers';
