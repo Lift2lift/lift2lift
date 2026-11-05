@@ -76,7 +76,17 @@ export type Trip = {
   checkins: { leg: Leg; riderId: string; riderConfirmedAt: string | null; driverStatus: 'picked_up' | 'no_show' | null }[];
 };
 
-export type ChatMessage = { id: string; rideId: string; senderId: string; body: string; createdAt: string };
+/** kind 'update' is a line the app posts when the driver changes or cancels the ride. */
+export type ChatMessage = { id: string; rideId: string; senderId: string; body: string; createdAt: string; kind: 'chat' | 'update' };
+
+/* ---------- Friends ---------- */
+
+export type FriendPerson = Person & { homeResortId?: string | null; schoolYear?: string | null; mutual?: boolean };
+/** Where you stand with someone. */
+export type FriendState = 'self' | 'friends' | 'sent' | 'received' | 'none';
+export type MyFriends = { friends: FriendPerson[]; incoming: FriendPerson[]; outgoing: FriendPerson[] };
+/** The friends shown on a profile, mutual ones first. */
+export type ProfileFriends = { count: number; mutual: number; state: FriendState; friends: FriendPerson[] };
 
 /** Averages about one person, split by role. */
 export type RatingSummary = {
@@ -201,6 +211,9 @@ export type NewRide = {
   contact: string;
 };
 
+/** A ride as the driver edits it, plus what's already booked. */
+export type EditableRide = NewRide & { id: string; rideDate: string; riders: number; seatsTakenTo: number; seatsTakenFrom: number };
+
 export type DayForecast = {
   date: string; // YYYY-MM-DD, Mountain Time
   hi: number; // °F
@@ -236,6 +249,19 @@ export interface Api {
   leaveSeat(rideId: string): Promise<void>;
   removeRider(rideId: string, riderId: string): Promise<void>;
   rideContact(rideId: string): Promise<string | null>;
+  /** Driver only: the ride as posted, for the edit form. Null if it's not yours or was cancelled. */
+  rideForEdit(rideId: string): Promise<EditableRide | null>;
+  /** Driver only. Riders on the ride get an update in the chat and a push. */
+  updateRide(rideId: string, ride: NewRide): Promise<void>;
+
+  myFriends(): Promise<MyFriends>;
+  profileFriends(userId: string): Promise<ProfileFriends>;
+  /** Sends a request, or accepts theirs if they already asked. */
+  friendRequest(userId: string): Promise<'sent' | 'friends'>;
+  respondFriend(userId: string, accept: boolean): Promise<void>;
+  /** Unfriend, or cancel a request you sent. */
+  removeFriend(userId: string): Promise<void>;
+  searchPeople(query: string): Promise<FriendPerson[]>;
 
   getProfile(userId: string): Promise<ProfilePage | null>;
 

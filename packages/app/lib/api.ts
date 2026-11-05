@@ -1,7 +1,7 @@
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, ChatMessage, DriverVerification, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
+import type { Api, BoardRide, ChatMessage, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
 
 type BoardRow = {
   id: string;
@@ -121,8 +121,22 @@ function toRide(r: BoardRow, urls: Record<string, string>): BoardRide {
   };
 }
 
-function toMessage(m: { id: string; ride_id: string; sender_id: string; body: string; created_at: string }): ChatMessage {
-  return { id: m.id, rideId: m.ride_id, senderId: m.sender_id, body: m.body, createdAt: m.created_at };
+type MessageRow = { id: string; ride_id: string; sender_id: string; body: string; created_at: string; kind?: 'chat' | 'update' };
+function toMessage(m: MessageRow): ChatMessage {
+  return { id: m.id, rideId: m.ride_id, senderId: m.sender_id, body: m.body, createdAt: m.created_at, kind: m.kind === 'update' ? 'update' : 'chat' };
+}
+
+type FriendRow = { id: string; name: string; avatar_path: string | null; gender: Gender | null; home_resort_id?: string | null; school_year?: string | null; mutual?: boolean };
+function toFriend(p: FriendRow, urls: Record<string, string>): FriendPerson {
+  return {
+    id: p.id,
+    name: p.name,
+    gender: p.gender,
+    avatarUrl: p.avatar_path ? urls[p.avatar_path] ?? null : null,
+    homeResortId: p.home_resort_id ?? null,
+    schoolYear: p.school_year ?? null,
+    mutual: !!p.mutual,
+  };
 }
 
 /** Throw a readable error for any Supabase failure. */
@@ -250,6 +264,81 @@ export function createApi(supabase: SupabaseClient): Api {
     async rideContact(rideId) {
       const { data } = check(await supabase.rpc('ride_contact', { p_ride_id: rideId }));
       return (data as string | null) ?? null;
+    },
+    async rideForEdit(rideId) {
+      const { data } = check(await supabase.rpc('ride_for_edit', { p_ride_id: rideId }));
+      const r = data as Record<string, unknown> | null;
+      if (!r) return null;
+      return {
+        id: String(r.id),
+        resortId: String(r.resort_id),
+        tripType: r.trip_type as TripType,
+        departAt: String(r.depart_at),
+        returnAt: (r.return_at as string | null) ?? null,
+        returnMeet: String(r.return_meet ?? ''),
+        leaveFrom: String(r.leave_from ?? ''),
+        seatsTotal: Number(r.seats_total),
+        gasPerRider: Number(r.gas_per_rider),
+        gear: String(r.gear ?? ''),
+        notes: String(r.notes ?? ''),
+        contact: String(r.contact ?? ''),
+        rideDate: String(r.ride_date),
+        riders: Number(r.riders),
+        seatsTakenTo: Number(r.seats_taken_to),
+        seatsTakenFrom: Number(r.seats_taken_from),
+      };
+    },
+    async updateRide(rideId, ride) {
+      const { data } = check(
+        await supabase
+          .from('rides')
+          .update({
+            resort_id: ride.resortId,
+            trip_type: ride.tripType,
+            depart_at: ride.departAt,
+            return_at: ride.tripType === 'round_trip' ? ride.returnAt : null,
+            return_meet: ride.tripType === 'round_trip' ? ride.returnMeet : '',
+            leave_from: ride.leaveFrom,
+            seats_total: ride.seatsTotal,
+            gas_per_rider: ride.gasPerRider,
+            gear: ride.gear,
+            notes: ride.notes,
+            contact: ride.contact,
+          })
+          .eq('id', rideId)
+          .select('id'),
+      );
+      if (!data?.length) throw new Error("That ride isn't yours to edit, or it was cancelled.");
+    },
+
+    async myFriends() {
+      const { data } = check(await supabase.rpc('my_friends'));
+      const d = (data ?? { friends: [], incoming: [], outgoing: [] }) as Record<'friends' | 'incoming' | 'outgoing', FriendRow[]>;
+      const urls = await signAvatars([...d.friends, ...d.incoming, ...d.outgoing].map((p) => p.avatar_path));
+      return { friends: d.friends.map((p) => toFriend(p, urls)), incoming: d.incoming.map((p) => toFriend(p, urls)), outgoing: d.outgoing.map((p) => toFriend(p, urls)) };
+    },
+    async profileFriends(userId) {
+      const { data } = check(await supabase.rpc('profile_friends', { p_user_id: userId }));
+      const d = (data ?? { count: 0, mutual: 0, state: 'none', friends: [] }) as { count: number; mutual: number; state: FriendState; friends: FriendRow[] };
+      const urls = await signAvatars(d.friends.map((p) => p.avatar_path));
+      return { count: d.count, mutual: d.mutual, state: d.state, friends: d.friends.map((p) => toFriend(p, urls)) };
+    },
+    async friendRequest(userId) {
+      const { data } = check(await supabase.rpc('friend_request', { p_user_id: userId }));
+      return data === 'friends' ? 'friends' : 'sent';
+    },
+    async respondFriend(userId, accept) {
+      check(await supabase.rpc('friend_respond', { p_user_id: userId, p_accept: accept }));
+    },
+    async removeFriend(userId) {
+      check(await supabase.rpc('friend_remove', { p_user_id: userId }));
+    },
+    async searchPeople(query) {
+      if (query.trim().length < 2) return [];
+      const { data } = check(await supabase.rpc('search_people', { p_query: query.trim().slice(0, 60) }));
+      const rows = (data ?? []) as FriendRow[];
+      const urls = await signAvatars(rows.map((p) => p.avatar_path));
+      return rows.map((p) => toFriend(p, urls));
     },
 
     async getProfile(userId) {
@@ -480,9 +569,9 @@ export function createApi(supabase: SupabaseClient): Api {
     },
     async listMessages(rideId) {
       const { data } = check(
-        await supabase.from('ride_messages').select('id, ride_id, sender_id, body, created_at').eq('ride_id', rideId).order('created_at').limit(500),
+        await supabase.from('ride_messages').select('id, ride_id, sender_id, body, created_at, kind').eq('ride_id', rideId).order('created_at').limit(500),
       );
-      return ((data ?? []) as { id: string; ride_id: string; sender_id: string; body: string; created_at: string }[]).map(toMessage);
+      return ((data ?? []) as MessageRow[]).map(toMessage);
     },
     async sendMessage(rideId, body) {
       check(await supabase.from('ride_messages').insert({ ride_id: rideId, body: body.trim().slice(0, 1000) }));
@@ -491,7 +580,7 @@ export function createApi(supabase: SupabaseClient): Api {
       const channel = supabase
         .channel(`ride-chat-${rideId}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, (payload) =>
-          onMessage(toMessage(payload.new as { id: string; ride_id: string; sender_id: string; body: string; created_at: string })),
+          onMessage(toMessage(payload.new as MessageRow)),
         )
         .subscribe();
       return () => {

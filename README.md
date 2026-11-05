@@ -27,17 +27,23 @@ supabase/
 - **CU Boulder only**: every account needs a @colorado.edu email (department subdomains like @cs.colorado.edu work too), confirmed with a 6-digit code sent to that inbox. The database rejects any other address, including on email changes.
 - **Accounts**: sign up with name, email and password, confirmed by a 6-digit emailed code. Sign in, sign out, forgot password (code + new password). Sessions persist on web and iPhone.
 - **Phone layout**: on iPhone (and on the web below 640px) the top bar shrinks to the wordmark and account button, and a bottom tab bar holds Rides, Your Rides, Post, Snow and Profile (`components/TabBar.tsx`, `lib/layout.ts`).
-- **Ride board, in two steps**: the landing page asks "Where are you headed?" and lists only the mountains with rides on the chosen day, each showing its ride count, open seats and new snow. Mountains with no rides are tucked behind a "Show … mountains with no rides yet" link, and "Your rides" sits on top. Tap a mountain to see its rides: ticket cards with departure time, pickup spot, gas money, gear space, a seat map and that day's forecast. The day buttons stay on both screens, and "Open seats only" sits on the mountain page.
+- **Account menu**: the account button opens a menu that floats over the page (nothing underneath moves). It has your profile, with **Account settings** under it, **Get verified to drive** only until you're verified, and Sign out.
+- **Ride board, in two steps**: the landing page asks "Where are you headed?" and lists only the mountains with rides on the chosen day, each showing its ride count, open seats and new snow. Mountains with no rides are tucked behind a "Show … mountains with no rides yet" link, and "Your rides" sits on top. Tap a mountain to see its rides: ticket cards with departure time, pickup spot, gas money, gear space, a seat map and that day's forecast.
+  - **Built for a busy board (100+ rides)**: the day is a **calendar dropdown** (with Today, Tomorrow and Saturday shortcuts, and each day's ride count on the calendar). A **Sort** dropdown orders rides by **departure time** (earliest or latest first), most open seats or lowest gas, and orders mountains by shortest drive, next departure or most rides. Each mountain shows its next departure. On "All upcoming", rides are grouped under day headings, and long lists load 20 at a time. "Your rides" on the home screen shows the next 3.
+  - **Pass filter**: a **Pass** dropdown on the home screen shows only mountains on **Ikon**, **Epic**, **Indy** or **Mountain Collective**, or those on none of them. Mountains are tagged with their passes, and each mountain's page says which passes work there and any day limits (Aspen's 7 shared Ikon days, Telluride's 7 Epic days, Epic Local's 10 days at Vail and Beaver Creek). The list is in `packages/app/lib/passes.ts`, for the 2026–27 season. Update it each spring when the new passes go on sale.
+  - "Open seats only", "↑ Rides up" and "↓ Rides down" sit on the mountain page.
 - **Round trip or one way**: drivers post a **round trip** (up in the morning, a set time and meeting spot for the ride back), **one way up**, or **one way down**. One-way trips have half the legal gas cap. The mountain page filters by **↑ Rides up** and **↓ Rides down**.
 - **Call shotgun**: on a round trip, pick **Round trip**, **Just the ride up** or **Just the ride down** (a one-way seat pays half the gas, rounded down). Booking only one way brings up **“Have a ride back from the mountain?”** with **Confirm one way**, **Make it a round trip** and **Find a ride back** (which opens that mountain's rides down the same day). Booking only the ride down asks “Have a ride up to the mountain?”. People can combine one ride up and a different ride down on the same day, but never two seats on the same leg. Bail on a seat any time. Drivers see who's riding, can remove riders and can cancel the ride.
-- **Your Rides**: a tab with every trip you're driving or riding, the next leg up top with a live countdown.
+- **Your Rides**: a tab with every trip you're driving or riding, the next leg up top with a live countdown, and a **Rides you're driving** list with **Edit ride** on each.
+  - **Editing a ride**: change times, meeting spots, seats, gas, gear, contact and notes. Before anyone books, the mountain, day and trip type can change too. Once riders are booked, those stay fixed, gas money can only go down, and seats can't drop below what's booked. Riders get a **“Ride updated”** push and a line in the ride chat saying what changed (“Kit changed the ride: leaves at 7:30 AM (was 7:00 AM), gas is now $8 (was $10).”). A new time resets that leg's reminders so they go out on the new schedule. Cancelling sends **“Ride cancelled”**. Editing is also on your own ride cards on the board, and **Edit ride** is at the top of the ride-day screen.
   - **2 hours before each leg** (up and down), everyone on that leg gets a push: “Leaving in 2 hours · Up to Eldora at 7:40 AM from Williams Village. Tap for the countdown and chat.”
   - **30 minutes before**, opening the app goes straight to **Your Ride** and stays there (no tab bar) until 15 minutes after departure or until check-in is done. “Can't make it?” is always available.
   - **Ride chat**: driver and riders message each other live (Supabase Realtime), with quick replies like “On my way” and “Where are you parked?”. Only people on the ride can read it.
   - **5 minutes before**, passengers get **“Confirm your ride”** and tap “I'm here, confirm my seat”; the driver gets **“Confirm your passengers”** and marks each one **Picked up** or **No-show**.
   - The same reminders and lock-in happen again for the ride down.
+- **Friends**: add people from their profile or from **Friends** (search by name or Instagram). They accept or decline. Friends show on your profile (mutual friends first on other people's), requests waiting for you show at the top of your profile, and ride cards are tagged **Your friend is driving** or **Maya is riding**.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders who claimed a seat.
-- **Post a ride**: tap-to-pick mountain, day, time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
+- **Post a ride**: tap-to-pick mountain, day (calendar, up to 60 days out, with days you already have a ride faded), time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
 - **Profiles**: the first time someone posts a ride or calls shotgun, a pop-up starts profile setup:
   1. **Photo**: scan their license and take a live selfie (Stripe Identity). The selfie is matched to the license photo and becomes their profile photo. People can't upload their own profile photo, so every photo is verified.
   2. **About you**: name, gender (shown as a ring around the photo: blue for men, pink for women, neutral for nonbinary or "prefer not to say"), ski or snowboard, home mountain, year and major, hometown, bio, Instagram, and four optional quick prompts.
@@ -214,7 +220,12 @@ The iPhone app asks to allow notifications the first time someone has a booked r
 | `ride_messages` | Ride chat, in the Realtime publication | Only the driver and riders on that ride read and post |
 | `ride_checkins` / `confirm_my_seat()` / `confirm_passenger()` | Per leg: rider says they're here, driver marks picked up or no-show. Opens 30 minutes before the leg | Riders confirm themselves; drivers mark their passengers |
 | `push_tokens` / `register_push_token()` | Expo push tokens per device | Each person registers their own |
-| `claim_due_notifications()` | 2-hour and 5-minute reminders that are due, each returned once | `send-ride-reminders` edge function only |
+| `claim_due_notifications()` | 2-hour and 5-minute reminders that are due, plus “Ride updated” / “Ride cancelled” pushes, each returned once | `send-ride-reminders` edge function only |
+| `ride_messages.kind` | `chat`, or `update` for the line posted when the driver changes or cancels a booked ride | People can only post `chat` |
+| `ride_for_edit()` / ride update rules | The edit form's data, and the rules for changing a booked ride (same mountain and day, gas only goes down, finished rides are locked) | Drivers, for their own rides |
+| `friendships` | One row per pair: pending until accepted | Read your own rows; changed only through the functions below |
+| `friend_request()` / `friend_respond()` / `friend_remove()` | Send (or accept theirs), accept or decline, unfriend or cancel | Signed-in users |
+| `my_friends()` / `profile_friends()` / `search_people()` | Your friends and requests; a profile's friends with mutual count; find people by name or Instagram | Signed-in users |
 | `allowed_email_domains` | Email domains that can sign up (`colorado.edu`). A trigger on `auth.users` rejects everything else | Anyone reads |
 | `reviews` | One per reviewer, per person, per ride: role, driving (drivers only), experience, optional text | Signed-in users read; written only through `submit_review()` |
 | `submit_review()` | Checks the reviewer was a passenger, the ride has left and is under 14 days old, the reviewee was on it, and the ratings are half stars | Signed-in users |
@@ -227,17 +238,14 @@ The iPhone app asks to allow notifications the first time someone has a booked r
 | `identity-start` edge function | Starts or resumes a Stripe check (license only, live capture, matching selfie) | Signed-in users |
 | `identity-webhook` edge function | Verifies Stripe's signature, saves the result, redacts images | Stripe |
 
-The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), consent, photo privacy, face mismatch then retry, stale Stripe events, no self-approval, rejection and resubmission. `trips_test.sql` covers round-trip and one-way gas caps, booking legs (one up plus a different one down is fine, two on the same leg isn't), per-leg seat limits, chat privacy, check-in windows and permissions, and that each reminder is sent once. To run them against plain Postgres:
+The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), consent, photo privacy, face mismatch then retry, stale Stripe events, no self-approval, rejection and resubmission. `trips_test.sql` covers round-trip and one-way gas caps, booking legs (one up plus a different one down is fine, two on the same leg isn't), per-leg seat limits, chat privacy, check-in windows and permissions, and that each reminder is sent once. `friends_test.sql` covers requests, accepting by asking back, declining, unfriending, mutual friends, privacy and search (wildcards are taken literally). `ride_edits_test.sql` covers what can change once riders are booked, the chat update lines, update and cancel pushes, reminder resets and locking finished rides. To run them against plain Postgres:
 
 ```bash
-psql "$DB" -f supabase/tests/supabase_stub.sql -f supabase/migrations/20261029000001_init.sql \
-  -f supabase/migrations/20261029000002_colorado_carpool_rules.sql \
-  -f supabase/migrations/20261029000003_cu_email_and_driver_verification.sql \
-  -f supabase/migrations/20261029000004_identity_selfie_check.sql -f supabase/migrations/20261030000005_profiles.sql \
-  -f supabase/migrations/20261030000006_reviews.sql -f supabase/migrations/20261030000007_trips_your_rides.sql \
+psql "$DB" -f supabase/tests/supabase_stub.sql $(for f in supabase/migrations/*.sql; do printf -- "-f %s " "$f"; done) \
   -f supabase/seed.sql -f supabase/tests/helpers.sql \
   -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql \
-  -f supabase/tests/reviews_test.sql -f supabase/tests/trips_test.sql
+  -f supabase/tests/reviews_test.sql -f supabase/tests/trips_test.sql \
+  -f supabase/tests/friends_test.sql -f supabase/tests/ride_edits_test.sql
 ```
 
 ## Options
