@@ -7,7 +7,7 @@ import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
 import { useApi, useNav } from '../providers';
 
-const TAGLINE = 'Rides to the hill · Colorado';
+const TAGLINE = 'Rides from the Hill · Colorado';
 const emailProps = {
   autoCapitalize: 'none',
   autoCorrect: false,
