@@ -51,8 +51,55 @@ export function PickerSheet({ visible, title, onClose, children }: { visible: bo
 }
 
 /** The button that opens a picker: "Sat Nov 7 ▾". */
-export function DropdownButton({ label, value, onPress, accessibilityLabel }: { label?: string; value: string; onPress: () => void; accessibilityLabel?: string }) {
+export function DropdownButton({
+  label,
+  value,
+  onPress,
+  accessibilityLabel,
+  fill,
+}: {
+  label?: string;
+  value: string;
+  onPress: () => void;
+  accessibilityLabel?: string;
+  /** Equal-width box for a row of filters: small label on top, value below. */
+  fill?: boolean;
+}) {
   const t = useTheme();
+  if (fill) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? `${label ? `${label}: ` : ''}${value}`}
+        style={({ pressed }) => ({
+          flex: 1,
+          flexBasis: 0,
+          minWidth: 0,
+          gap: 2,
+          borderWidth: 1.5,
+          borderColor: t.ink,
+          backgroundColor: t.surface,
+          borderRadius: 10,
+          paddingHorizontal: 8,
+          paddingVertical: 8,
+          opacity: pressed ? 0.85 : 1,
+        })}
+      >
+        {label ? (
+          <Text numberOfLines={1} style={{ color: t.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' }}>
+            {label}
+          </Text>
+        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={{ color: t.ink, fontSize: 14, fontWeight: '800', flex: 1 }}>
+            {value}
+          </Text>
+          <Text style={{ color: t.ink, fontSize: 10 }}>▼</Text>
+        </View>
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       onPress={onPress}
@@ -98,6 +145,7 @@ export function DayPicker({
   disabled,
   disabledNote,
   label,
+  fill,
 }: {
   value: string;
   onChange: (day: string) => void;
@@ -110,6 +158,7 @@ export function DayPicker({
   /** Shown under the calendar when some days are disabled. */
   disabledNote?: string;
   label?: string;
+  fill?: boolean;
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
@@ -145,7 +194,7 @@ export function DayPicker({
 
   return (
     <>
-      <DropdownButton label={label} value={shown} onPress={() => { setMonth(new Date(start.getFullYear(), start.getMonth(), 1)); setOpen(true); }} accessibilityLabel={`${label ?? 'Day'}: ${shown}. Change day`} />
+      <DropdownButton label={label} value={shown} onPress={() => { setMonth(new Date(start.getFullYear(), start.getMonth(), 1)); setOpen(true); }} accessibilityLabel={`${label ?? 'Day'}: ${shown}. Change day`} fill={fill} />
       <PickerSheet visible={open} title={label ?? 'Pick a day'} onClose={() => setOpen(false)}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
           {quick.map((q) => {
@@ -263,19 +312,21 @@ export function OptionPicker<T extends string>({
   value,
   options,
   onChange,
+  fill,
 }: {
   label: string;
   title: string;
   value: T;
   options: { id: T; label: string; hint?: string }[];
   onChange: (v: T) => void;
+  fill?: boolean;
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.id === value) ?? options[0];
   return (
     <>
-      <DropdownButton label={label} value={current.label} onPress={() => setOpen(true)} />
+      <DropdownButton label={label} value={current.label} onPress={() => setOpen(true)} fill={fill} />
       <PickerSheet visible={open} title={title} onClose={() => setOpen(false)}>
         <View style={{ gap: 4 }} accessibilityRole="radiogroup">
           {options.map((o) => {

@@ -264,14 +264,14 @@ export function RideBoardScreen({
             <Text style={{ color: t.ink, fontSize: 26, fontWeight: '900', textTransform: 'uppercase' }}>Where are you headed?</Text>
           )}
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <DayPicker value={day} onChange={setDay} allowAll minDay={today} maxDay={lastDay} counts={dayCounts} label="Day" />
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'stretch' }}>
+            <DayPicker value={day} onChange={setDay} allowAll minDay={today} maxDay={lastDay} counts={dayCounts} label="Day" fill />
             {resort ? (
-              <OptionPicker label="Sort" title="Sort rides" value={sort} onChange={setSort} options={RIDE_SORTS} />
+              <OptionPicker label="Sort" title="Sort rides" value={sort} onChange={setSort} options={RIDE_SORTS} fill />
             ) : (
               <>
-                <OptionPicker label="Pass" title={`Your ski pass (${PASS_SEASON})`} value={pass} onChange={setPass} options={PASS_FILTERS} />
-                <OptionPicker label="Sort" title="Sort mountains" value={mountainSort} onChange={setMountainSort} options={MOUNTAIN_SORTS} />
+                <OptionPicker label="Pass" title={`Your ski pass (${PASS_SEASON})`} value={pass} onChange={setPass} options={PASS_FILTERS} fill />
+                <OptionPicker label="Sort" title="Sort mountains" value={mountainSort} onChange={setMountainSort} options={MOUNTAIN_SORTS} fill />
               </>
             )}
           </View>

@@ -4,12 +4,13 @@ Everything App Review needs, in order. Items marked **(you)** need your accounts
 
 ## 1. Before the first build
 
-- [ ] **(you) Support email.** Replace `SUPPORT_EMAIL` in `packages/app/lib/config.ts`. It appears in the privacy policy, terms and Account → Help. Use an inbox someone reads daily, because reports must be handled within 24 hours.
+- [x] **Support email.** `help@lift2lift.net` (`SUPPORT_EMAIL` in `packages/app/lib/config.ts`). Make sure the inbox exists before review. It appears in the privacy policy, terms and Account → Help. Use an inbox someone reads daily, because reports must be handled within 24 hours.
 - [ ] **(you) Legal review.** `packages/app/lib/legal.ts` holds the privacy policy and terms, written to match the code. Have a lawyer read them, then publish.
-- [ ] **(you) EAS project.** In `apps/mobile` run `npx eas-cli login`, then `npx eas-cli init`. This adds `extra.eas.projectId` to `app.json`. Push reminders need it: without it, `getExpoPushTokenAsync` fails in a store build.
+- [x] **EAS project.** Linked to `@lif2lift/lift2lift` (`owner` and `extra.eas.projectId` in `app.json`). Push reminders need the project ID: without it, `getExpoPushTokenAsync` fails in a store build.
+- [x] **Bundle ID.** `app.lift2lift.ios`. It can't change after the first upload to App Store Connect.
 - [ ] **(you) Build secrets.** Run `npx eas-cli env:create --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <anon key> --environment production`. The URL is already in `eas.json`.
 - [ ] **(you) Push credentials.** The first `eas build` offers to create the APNs key. Then upload it to Expo so `send-ride-reminders` can deliver.
-- [ ] **App icon.** `apps/mobile/assets/icon.png` (1024×1024, no transparency) is a placeholder chairlift-and-peaks icon. Replace it with a designed one if you have it.
+- [x] **App icon.** The first builds ship with the current chairlift icon. When the real logo is ready, replace `apps/mobile/assets/icon.png` with a 1024×1024 PNG with no transparency and no rounded corners (iOS rounds them), then build again.
 
 ## 2. Backend (hosted project)
 
@@ -24,7 +25,7 @@ npx supabase functions deploy send-ride-reminders
 
 - [ ] **Deploy the website** (Vercel). Check that `https://lift2lift.vercel.app/privacy` and `/terms` load while signed out. App Store Connect needs the privacy URL.
 - [ ] **Report alerts.** In Supabase go to Database → Webhooks → Create. Pick table `public.reports`, event `INSERT`, and point it at Slack, Zapier or email so new reports reach a person. Act on each one within 24 hours: delete the content or account in the dashboard, then set `resolved_at` and `resolution` on the report.
-- [ ] **Demo accounts.** Run `psql "$PROD_DB_URL" -v password="'<strong password>'" -f supabase/review/demo_accounts.sql`. Run it again before each new submission so the demo rides are in the future.
+- [ ] **Demo accounts.** Run `psql "$PROD_DB_URL" -v password="'<strong password>'" -f supabase/review/demo_accounts.sql`, then `SUPABASE_URL=https://vpkxesucfaofwazqgpni.supabase.co SUPABASE_SERVICE_ROLE_KEY=<key> supabase/review/upload_demo_avatars.sh` to give both demo profiles a photo. Without the photo, Edit profile spins forever. Run both again before each new submission so the demo rides are in the future.
 - [ ] **Live keys.** Check that the AWS keys used by `license-check` and `insurance-check` are set on the hosted project (`npx supabase secrets list`).
 
 ## 3. Build and upload

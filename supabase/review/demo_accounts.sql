@@ -3,6 +3,10 @@
 --
 --   psql "$PROD_DB_URL" -v password="'choose-a-strong-password'" -f supabase/review/demo_accounts.sql
 --
+-- Then upload their profile photo (SQL can't), or Edit profile spins forever:
+--
+--   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... supabase/review/upload_demo_avatars.sh
+--
 -- Creates:
 --   appreview@lift2lift.test   the account Apple signs in with. Email confirmed,
 --                              profile finished, ID and insurance verified, so

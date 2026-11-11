@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "com.zatzworks.lift2lift",
+      "bundleIdentifier": "app.lift2lift.ios",
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -35,6 +35,12 @@
         }
       ]
     ],
-    "icon": "./assets/icon.png"
+    "icon": "./assets/icon.png",
+    "owner": "lif2lift",
+    "extra": {
+      "eas": {
+        "projectId": "636829ad-1142-46aa-9464-44f90252e715"
+      }
+    }
   }
 }
