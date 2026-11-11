@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
+import { ReportSheet } from '../components/Safety';
 import { Button, Card, FormScreen, Heading, Loading, Muted, Notice } from '../components/ui';
 import { clock, dayLabel, isoDay, longDay } from '../lib/dates';
 import { RESORT_BY_ID } from '../lib/resorts';
@@ -22,7 +23,7 @@ import { useApi, useAuth, useMyRides, useNav } from '../providers';
 const legTitle = (leg: Leg, resortId: string) => `${leg === 'to' ? 'Up to' : 'Back from'} ${RESORT_BY_ID[resortId]?.name ?? resortId}`;
 
 /** Your Rides tab: the list, or one ride's day-of view (countdown, check-in, chat). */
-export function YourRidesScreen({ rideId, leg }: { rideId?: string; leg?: Leg }) {
+export function YourRidesScreen({ rideId, leg, saved }: { rideId?: string; leg?: Leg; saved?: string }) {
   const { trips, locked } = useMyRides();
   const { session } = useAuth();
   const now = useNow(1000);
@@ -38,15 +39,20 @@ export function YourRidesScreen({ rideId, leg }: { rideId?: string; leg?: Leg })
   const legs = upcomingLegs(trips, now);
   const target = locked ?? (rideId ? legs.find((e) => e.trip.id === rideId && (!leg || e.leg === leg)) ?? null : null);
   if (target) return <RideDay event={target} locked={!!locked} />;
-  return <RidesList legs={legs} now={now} />;
+  // Every upcoming ride you're driving, booked or not, so you can edit it.
+  const driving = trips
+    .filter((tr) => tr.role === 'driver' && new Date(tr.returnAt ?? tr.departAt).getTime() > now)
+    .sort((a, b) => a.departAt.localeCompare(b.departAt));
+  return <RidesList legs={legs} now={now} driving={driving} saved={!!saved} />;
 }
 
 /* ---------------- List ---------------- */
 
-function RidesList({ legs, now }: { legs: LegEvent[]; now: number }) {
+function RidesList({ legs, now, driving, saved }: { legs: LegEvent[]; now: number; driving: Trip[]; saved: boolean }) {
   const t = useTheme();
   const nav = useNav();
-  if (!legs.length) {
+  const savedNote = saved ? <Notice kind="success">Ride updated. Anyone booked sees the change in the ride chat and gets a notification.</Notice> : null;
+  if (!legs.length && !driving.length) {
     return (
       <FormScreen header={<AppHeader />}>
         <Heading title="Your rides" subtitle="Rides you're driving or have a seat on show up here, with a countdown and a group chat." />
@@ -62,11 +68,23 @@ function RidesList({ legs, now }: { legs: LegEvent[]; now: number }) {
   return (
     <FormScreen header={<AppHeader />}>
       <Heading title="Your rides" />
-      <LegCard e={next} now={now} big />
+      {savedNote}
+      {next ? <LegCard e={next} now={now} big /> : null}
       {rest.length ? <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>LATER</Text> : null}
       {rest.map((e) => (
         <LegCard key={`${e.trip.id}-${e.leg}`} e={e} now={now} />
       ))}
+
+      {driving.length ? (
+        <View style={{ gap: 8 }}>
+          <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>RIDES YOU'RE DRIVING</Text>
+          <Card>
+            {driving.map((tr, i) => (
+              <DrivingRow key={tr.id} trip={tr} first={i === 0} />
+            ))}
+          </Card>
+        </View>
+      ) : null}
       <Muted>
         You'll get a notification 2 hours before each ride. From {LOCK_BEFORE_MIN} minutes before, the app opens straight to your ride so you can
         coordinate pickup.
@@ -121,6 +139,35 @@ function LegCard({ e, now, big }: { e: LegEvent; now: number; big?: boolean }) {
   );
 }
 
+/** One ride you're driving: when, how full, and Edit. */
+function DrivingRow({ trip, first }: { trip: Trip; first: boolean }) {
+  const t = useTheme();
+  const nav = useNav();
+  const up = passengersOn(trip, 'to').length;
+  const down = passengersOn(trip, 'from').length;
+  const d = isoDay(new Date(trip.departAt));
+  const seatsText =
+    trip.tripType === 'round_trip' && up !== down
+      ? `Up: ${up} of ${trip.seatsTotal} · Down: ${down} of ${trip.seatsTotal} booked`
+      : `${Math.max(up, down)} of ${trip.seatsTotal} seat${trip.seatsTotal === 1 ? '' : 's'} booked`;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: first ? 0 : 1, borderTopColor: t.line, flexWrap: 'wrap' }}>
+      <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+        <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>
+          {RESORT_BY_ID[trip.resortId]?.name ?? trip.resortId}
+          <Text style={{ color: t.muted, fontSize: 13, fontWeight: '600' }}>{`  ${TRIP_LABEL[trip.tripType]}`}</Text>
+        </Text>
+        <Text style={{ color: t.muted, fontSize: 13 }}>
+          {dayLabel(d)} · {trip.tripType === 'from_mountain' ? 'leaves the mountain' : 'leaves'} {clock(trip.departAt)}
+          {trip.tripType === 'round_trip' && trip.returnAt ? ` · back ${clock(trip.returnAt)}` : ''}
+        </Text>
+        <Text style={{ color: up || down ? t.ink : t.muted, fontSize: 13, fontWeight: '600' }}>{up || down ? seatsText : 'No riders yet'}</Text>
+      </View>
+      <Button small variant="ghost" title="Edit ride" onPress={() => nav.push('/post', { edit: trip.id })} />
+    </View>
+  );
+}
+
 /* ---------------- Ride day ---------------- */
 
 function RideDay({ event: e, locked }: { event: LegEvent; locked: boolean }) {
@@ -164,9 +211,16 @@ function RideDay({ event: e, locked }: { event: LegEvent; locked: boolean }) {
           </Text>
         </View>
       ) : (
-        <Pressable onPress={() => nav.replace('/rides')} accessibilityRole="button" style={{ alignSelf: 'flex-start' }}>
-          <Text style={{ color: t.link, fontSize: 15, fontWeight: '700' }}>‹ Your rides</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Pressable onPress={() => nav.replace('/rides')} accessibilityRole="button" style={{ alignSelf: 'flex-start' }}>
+            <Text style={{ color: t.link, fontSize: 15, fontWeight: '700' }}>‹ Your rides</Text>
+          </Pressable>
+          {isDriver ? (
+            <Pressable onPress={() => nav.push('/post', { edit: trip.id })} accessibilityRole="button">
+              <Text style={{ color: t.link, fontSize: 15, fontWeight: '700' }}>Edit ride</Text>
+            </Pressable>
+          ) : null}
+        </View>
       )}
 
       {/* Countdown */}
@@ -286,6 +340,7 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const [reporting, setReporting] = useState<ChatMessage | null>(null);
   const people = useMemo(() => Object.fromEntries([trip.driver, ...trip.passengers].map((p) => [p.id, p])), [trip]);
 
   useEffect(() => {
@@ -328,12 +383,24 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
       ) : (
         <View style={{ gap: 8 }}>
           {messages.slice(-30).map((m) => {
+            if (m.kind === 'update') {
+              return (
+                <View key={m.id} style={{ alignSelf: 'center', maxWidth: '92%', backgroundColor: t.chip, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, gap: 2 }}>
+                  <Text style={{ color: t.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6, textAlign: 'center' }}>RIDE UPDATED · {clock(m.createdAt)}</Text>
+                  <Text style={{ color: t.ink, fontSize: 14, lineHeight: 19, textAlign: 'center' }}>{m.body}</Text>
+                </View>
+              );
+            }
             const mine = m.senderId === meId;
             const p = people[m.senderId];
             return (
               <View key={m.id} style={{ flexDirection: mine ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-end' }}>
                 {!mine ? <Avatar uri={p?.avatarUrl} name={p?.name ?? ''} gender={p?.gender} size={28} /> : null}
-                <View style={{ maxWidth: '78%', gap: 2, alignItems: mine ? 'flex-end' : 'flex-start' }}>
+                <Pressable
+                  onLongPress={mine ? undefined : () => setReporting(m)}
+                  accessibilityHint={mine ? undefined : 'Long press to report this message'}
+                  style={{ maxWidth: '78%', gap: 2, alignItems: mine ? 'flex-end' : 'flex-start' }}
+                >
                   {!mine ? <Text style={{ color: t.muted, fontSize: 11, fontWeight: '700' }}>{p?.name.split(' ')[0] ?? 'Someone'}{m.senderId === trip.driver.id ? ' · driver' : ''}</Text> : null}
                   <View
                     style={{
@@ -347,8 +414,15 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
                   >
                     <Text style={{ color: mine ? t.accentInk : t.ink, fontSize: 15, lineHeight: 20 }}>{m.body}</Text>
                   </View>
-                  <Text style={{ color: t.muted, fontSize: 10 }}>{clock(m.createdAt)}</Text>
-                </View>
+                  <Text style={{ color: t.muted, fontSize: 10 }}>
+                    {clock(m.createdAt)}
+                    {!mine ? (
+                      <Text onPress={() => setReporting(m)} accessibilityRole="button" accessibilityLabel="Report message" style={{ fontWeight: '700' }}>
+                        {'  ·  Report'}
+                      </Text>
+                    ) : null}
+                  </Text>
+                </Pressable>
               </View>
             );
           })}
@@ -381,6 +455,20 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
         <Button small title="Send" loading={sending} disabled={!text.trim()} onPress={() => send(text)} />
       </View>
       {error ? <Notice kind="error">{error}</Notice> : null}
+      {reporting ? (
+        <ReportSheet
+          visible
+          onClose={() => setReporting(null)}
+          userId={reporting.senderId}
+          name={people[reporting.senderId]?.name ?? ''}
+          kind="message"
+          targetId={reporting.id}
+          onBlocked={() => {
+            const gone = reporting.senderId;
+            setMessages((prev) => (prev ?? []).filter((x) => x.senderId !== gone));
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

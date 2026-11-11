@@ -7,6 +7,7 @@ import { useTheme } from '../lib/theme';
 import { insuranceErrorMessage } from '../lib/identity';
 import { canHost, type DriverVerification } from '../lib/types';
 import { useApi, useAuth, useDevice, useNav } from '../providers';
+import { DeleteAccountSection, HelpLinks } from './SafetyScreens';
 
 /* ---------------- Status pill ---------------- */
 
@@ -116,6 +117,13 @@ export function AccountScreen() {
         </Card>
       </View>
 
+      <View style={{ gap: 8 }}>
+        <Label>Help, safety and legal</Label>
+        <Card style={{ padding: 16 }}>
+          <HelpLinks />
+        </Card>
+      </View>
+
       <Button
         title="Sign out"
         variant="ghost"
@@ -125,6 +133,8 @@ export function AccountScreen() {
           await api.signOut();
         }}
       />
+
+      <DeleteAccountSection />
     </FormScreen>
   );
 }

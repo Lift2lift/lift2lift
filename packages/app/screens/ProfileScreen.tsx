@@ -3,14 +3,16 @@ import { Linking, Platform, Pressable, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
 import { Stars } from '../components/Stars';
+import { ProfileSafetyActions, ReportSheet } from '../components/Safety';
 import { Button, Card, FormScreen, Label, Loading, Notice } from '../components/ui';
 import { SCHOOL_NAME } from '../lib/config';
 import { clock, DOW, MON } from '../lib/dates';
 import { DISCIPLINE_LABEL, INTEREST_LABEL, PROFILE_PROMPTS } from '../lib/interests';
 import { RESORT_BY_ID } from '../lib/resorts';
 import { useTheme } from '../lib/theme';
-import type { ProfilePage, RatingSummary, Review } from '../lib/types';
+import type { FriendState, ProfileFriends, ProfilePage, RatingSummary, Review } from '../lib/types';
 import { useApi, useAuth, useNav } from '../providers';
+import { FriendButton, FriendsStrip } from './FriendsScreen';
 
 /** A link to another website: a real link on the web, the system browser on iOS. */
 function ExternalLink({ href, children }: { href: string; children: string }) {
@@ -80,6 +82,8 @@ function RatingsSection({
 }) {
   const t = useTheme();
   const nav = useNav();
+  const { session } = useAuth();
+  const [reporting, setReporting] = useState<Review | null>(null);
   const s = data.summary;
   const shown = data.reviews.filter((r) => tab === 'all' || r.role === tab);
   const tabs: { id: typeof tab; label: string; n: number }[] = [
@@ -149,10 +153,25 @@ function RatingsSection({
                   </View>
                 </View>
                 {r.body ? <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22 }}>{r.body}</Text> : null}
+                {r.reviewerId !== session?.userId ? (
+                  <Pressable onPress={() => setReporting(r)} accessibilityRole="button" accessibilityLabel={`Report ${r.reviewerName}'s review`} hitSlop={8} style={{ alignSelf: 'flex-start' }}>
+                    <Text style={{ color: t.muted, fontSize: 13, fontWeight: '700' }}>Report review</Text>
+                  </Pressable>
+                ) : null}
               </Card>
             );
           })}
         </>
+      ) : null}
+      {reporting ? (
+        <ReportSheet
+          visible
+          onClose={() => setReporting(null)}
+          userId={reporting.reviewerId}
+          name={reporting.reviewerName}
+          kind="review"
+          targetId={reporting.id}
+        />
       ) : null}
     </View>
   );
@@ -174,19 +193,36 @@ export function ProfileScreen({ userId }: { userId?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [ratings, setRatings] = useState<{ summary: RatingSummary; reviews: Review[] } | null>(null);
   const [tab, setTab] = useState<'all' | 'driver' | 'passenger'>('all');
+  const [friends, setFriends] = useState<ProfileFriends | null>(null);
+  const [requests, setRequests] = useState(0);
+
+  useEffect(() => {
+    if (!id) return;
+    api.profileFriends(id).then(setFriends).catch(() => {});
+  }, [api, id]);
+  useEffect(() => {
+    if (!mine) return;
+    api.myFriends().then((f) => setRequests(f.incoming.length)).catch(() => {});
+  }, [api, mine]);
+  const setFriendState = (state: FriendState) => {
+    setFriends((f) => (f ? { ...f, state } : f));
+    if (id) api.profileFriends(id).then(setFriends).catch(() => {});
+  };
 
   useEffect(() => {
     if (!id) return;
     api.getReviews(id).then(setRatings).catch(() => {});
   }, [api, id]);
 
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     if (!id) return;
     api
       .getProfile(id)
       .then((x) => (x ? setP(x) : setError("That profile doesn't exist.")))
       .catch((e: Error) => setError(e.message));
-  }, [api, id]);
+  }, [api, id, reload]);
+  const [unblocking, setUnblocking] = useState(false);
 
   if (error) {
     return (
@@ -209,6 +245,36 @@ export function ProfileScreen({ userId }: { userId?: string }) {
   const prompts = PROFILE_PROMPTS.filter((q) => p.prompts[q.key]);
   const first = p.fullName.split(' ')[0] || 'They';
 
+  if (p.blockedByMe) {
+    return (
+      <FormScreen header={<AppHeader />}>
+        <View style={{ alignItems: 'center', gap: 10 }}>
+          <Text style={{ color: t.ink, fontSize: 26, fontWeight: '900', textAlign: 'center' }}>{p.fullName || 'Lift2Lift member'}</Text>
+          <Text style={{ color: t.muted, fontSize: 15, textAlign: 'center' }}>
+            You blocked {first}. You don't see each other's rides, messages or reviews.
+          </Text>
+        </View>
+        <Button
+          variant="ghost"
+          title={`Unblock ${first}`}
+          loading={unblocking}
+          onPress={async () => {
+            setUnblocking(true);
+            try {
+              await api.unblockUser(p.id);
+              setReload((n) => n + 1);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setUnblocking(false);
+            }
+          }}
+        />
+        <Button variant="ghost" title="Back to rides" onPress={() => nav.replace('/')} />
+      </FormScreen>
+    );
+  }
+
   return (
     <FormScreen header={<AppHeader />}>
       {mine && !p.profileComplete ? (
@@ -227,11 +293,53 @@ export function ProfileScreen({ userId }: { userId?: string }) {
         ) : null}
         {p.instagram ? <ExternalLink href={`https://www.instagram.com/${encodeURIComponent(p.instagram)}/`}>{`@${p.instagram} on Instagram`}</ExternalLink> : null}
         {mine ? (
-          <View style={{ alignSelf: 'stretch' }}>
-            <Button variant="ghost" title="Edit profile" onPress={() => nav.push('/profile/setup')} />
+          <View style={{ alignSelf: 'stretch', flexDirection: 'row', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Button variant="ghost" title="Edit profile" onPress={() => nav.push('/profile/setup')} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button variant="ghost" title="Account settings" onPress={() => nav.push('/account')} />
+            </View>
+          </View>
+        ) : friends ? (
+          <View style={{ alignItems: 'center', gap: 6 }}>
+            <FriendButton userId={p.id} state={friends.state} onChange={setFriendState} />
+            {friends.state === 'received' ? <Text style={{ color: t.muted, fontSize: 13 }}>{first} sent you a friend request.</Text> : null}
           </View>
         ) : null}
+        {!mine ? <ProfileSafetyActions userId={p.id} name={p.fullName} onBlocked={() => setReload((n) => n + 1)} /> : null}
       </View>
+
+      {mine && requests ? (
+        <Pressable
+          onPress={() => nav.push('/friends')}
+          accessibilityRole="button"
+          style={({ pressed }) => ({ backgroundColor: t.surface, borderColor: t.accent, borderWidth: 2, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: pressed ? 0.85 : 1 })}
+        >
+          <View style={{ minWidth: 28, height: 28, borderRadius: 14, paddingHorizontal: 6, backgroundColor: t.accent, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: t.accentInk, fontWeight: '900' }}>{requests}</Text>
+          </View>
+          <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800', flex: 1 }}>
+            {requests === 1 ? 'Friend request waiting' : 'Friend requests waiting'}
+          </Text>
+          <Text style={{ color: t.muted, fontSize: 20 }}>›</Text>
+        </Pressable>
+      ) : null}
+
+      {/* Only until you're verified to drive */}
+      {mine && p.profileComplete && !p.driverVerified ? (
+        <Pressable
+          onPress={() => nav.push('/account/driver')}
+          accessibilityRole="button"
+          style={({ pressed }) => ({ backgroundColor: t.surface, borderColor: t.line, borderWidth: 1, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: pressed ? 0.85 : 1 })}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>Get verified to drive</Text>
+            <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>Scan your insurance card to post rides. Takes about a minute.</Text>
+          </View>
+          <Text style={{ color: t.muted, fontSize: 20 }}>›</Text>
+        </Pressable>
+      ) : null}
 
       {/* Stats */}
       <Card style={{ flexDirection: 'row', paddingVertical: 14 }}>
@@ -239,6 +347,8 @@ export function ProfileScreen({ userId }: { userId?: string }) {
         <Stat value={String(p.ridesTaken)} label="Rides taken" />
         <Stat value={`${MON[since.getMonth()]} ’${String(since.getFullYear()).slice(2)}`} label="Member since" />
       </Card>
+
+      {friends ? <FriendsStrip friends={friends.friends} count={friends.count} mutual={friends.mutual} mine={mine} first={first} /> : null}
 
       {/* Ratings */}
       {ratings ? <RatingsSection data={ratings} first={first} tab={tab} setTab={setTab} /> : null}

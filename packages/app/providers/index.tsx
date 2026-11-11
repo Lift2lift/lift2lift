@@ -47,11 +47,15 @@ export type Route =
   | '/post'
   | '/account'
   | '/account/driver'
+  | '/account/blocked'
+  | '/privacy'
+  | '/terms'
   | '/profile'
   | '/profile/setup'
   | '/u'
   | '/review'
   | '/rides'
+  | '/friends'
   | '/verified'
   | '/sign-in'
   | '/sign-up'
@@ -66,7 +70,7 @@ export type Nav = {
 
 export const AUTH_ROUTES: Route[] = ['/sign-in', '/sign-up', '/verify', '/forgot-password'];
 /** Open to everyone, signed in or not (Stripe's "you're done" page for iOS). */
-export const PUBLIC_ROUTES: Route[] = ['/verified'];
+export const PUBLIC_ROUTES: Route[] = ['/verified', '/privacy', '/terms'];
 
 const NavContext = createContext<Nav | null>(null);
 

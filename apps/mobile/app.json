@@ -3,16 +3,19 @@
     "name": "Lift2Lift",
     "slug": "lift2lift",
     "scheme": "lift2lift",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.zatzworks.lift2lift",
       "supportsTablet": false,
       "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification"
-        ]
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
+      },
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "plugins": [
@@ -20,8 +23,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Lift2Lift uses your photos so you can upload your insurance card.",
-          "cameraPermission": "Lift2Lift uses the camera so you can snap your insurance card."
+          "photosPermission": "Lift2Lift uses your photos so you can add your driver's license, a selfie for your verified profile photo, or your insurance card.",
+          "cameraPermission": "Lift2Lift uses the camera so you can photograph your driver's license, take the selfie that becomes your verified profile photo, and snap your insurance card.",
+          "microphonePermission": false
         }
       ],
       [
@@ -30,6 +34,7 @@
           "defaultChannel": "rides"
         }
       ]
-    ]
+    ],
+    "icon": "./assets/icon.png"
   }
 }

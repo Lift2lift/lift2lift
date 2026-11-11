@@ -7,7 +7,7 @@ import { Suspense } from 'react';
 function Screen() {
   const q = useSearchParams();
   const leg = q.get('leg');
-  return <YourRidesScreen rideId={q.get('ride') ?? undefined} leg={leg === 'to' || leg === 'from' ? leg : undefined} />;
+  return <YourRidesScreen rideId={q.get('ride') ?? undefined} leg={leg === 'to' || leg === 'from' ? leg : undefined} saved={q.get('saved') ?? undefined} />;
 }
 
 export default function Page() {

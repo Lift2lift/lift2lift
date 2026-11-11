@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Platform, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { Brand, Button, Field, FormScreen, Heading, Notice, TextLink } from '../components/ui';
 import { isSchoolEmail, MIN_PASSWORD_LENGTH, SCHOOL_EMAIL_ERROR } from '../lib/config';
 import { isValidEmail } from '../lib/errors';
@@ -16,6 +16,37 @@ const emailProps = {
   textContentType: 'emailAddress',
   placeholder: 'you@colorado.edu',
 } as const;
+
+/** "I agree to the Terms and Privacy policy", required to create an account. */
+function AgreeBox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  const t = useTheme();
+  const nav = useNav();
+  return (
+    <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+      <Pressable
+        onPress={() => onChange(!checked)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked }}
+        accessibilityLabel="I agree to the Terms and Privacy policy"
+        hitSlop={8}
+        style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: checked ? t.accent : t.line, backgroundColor: checked ? t.accent : 'transparent', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}
+      >
+        {checked ? <Text style={{ color: t.accentInk, fontWeight: '900', fontSize: 14 }}>✓</Text> : null}
+      </Pressable>
+      <Text style={{ color: t.ink, fontSize: 14, lineHeight: 21, flex: 1 }}>
+        I'm 18 or older and agree to the{' '}
+        <Text onPress={() => nav.push('/terms')} accessibilityRole="link" style={{ color: t.link, fontWeight: '700' }}>
+          Terms and community guidelines
+        </Text>{' '}
+        (no tolerance for abusive content or users) and the{' '}
+        <Text onPress={() => nav.push('/privacy')} accessibilityRole="link" style={{ color: t.link, fontWeight: '700' }}>
+          Privacy policy
+        </Text>
+        .
+      </Text>
+    </View>
+  );
+}
 
 function Footer({ children }: { children: ReactNode }) {
   const t = useTheme();
@@ -66,7 +97,7 @@ export function SignInScreen() {
     setError(null);
     const clean = email.trim().toLowerCase();
     if (!isValidEmail(clean)) return setError('Enter a valid email address.');
-    if (!isSchoolEmail(clean)) return setError(SCHOOL_EMAIL_ERROR);
+    // No school-email check here: sign-up enforces it, and the App Review demo account uses another domain.
     if (!password) return setError('Enter your password.');
     setLoading(true);
     try {
@@ -105,6 +136,10 @@ export function SignInScreen() {
       </View>
       <Button title="Sign in" onPress={submit} loading={loading} />
       <GoogleButton onError={setError} />
+      <Text style={{ color: useTheme().muted, fontSize: 12, textAlign: 'center' }}>
+        By continuing you agree to the <Text onPress={() => nav.push('/terms')} style={{ textDecorationLine: 'underline' }}>Terms</Text> and{' '}
+        <Text onPress={() => nav.push('/privacy')} style={{ textDecorationLine: 'underline' }}>Privacy policy</Text>.
+      </Text>
       <Footer>
         New here? <TextLink onPress={() => nav.push('/sign-up')}>Create an account</TextLink>
       </Footer>
@@ -120,6 +155,7 @@ export function SignUpScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const emailRef = useRef<TextInput>(null);
@@ -133,6 +169,7 @@ export function SignUpScreen() {
     if (!isValidEmail(clean)) return setError('Enter a valid email address.');
     if (!isSchoolEmail(clean)) return setError(SCHOOL_EMAIL_ERROR);
     if (password.length < MIN_PASSWORD_LENGTH) return setError(`Use at least ${MIN_PASSWORD_LENGTH} characters for your password.`);
+    if (!agreed) return setError('Agree to the Terms and Privacy policy to create an account.');
     setLoading(true);
     try {
       const { needsVerification } = await api.signUp(cleanName, clean, password);
@@ -183,8 +220,9 @@ export function SignUpScreen() {
         onSubmitEditing={submit}
       />
       <Notice kind="info">{CARPOOL_DISCLAIMER}</Notice>
+      <AgreeBox checked={agreed} onChange={setAgreed} />
       <Button title="Create account" onPress={submit} loading={loading} />
-      <GoogleButton onError={setError} />
+      {agreed ? <GoogleButton onError={setError} /> : null}
       <Footer>
         Already have an account? <TextLink onPress={() => nav.replace('/sign-in')}>Sign in</TextLink>
       </Footer>
