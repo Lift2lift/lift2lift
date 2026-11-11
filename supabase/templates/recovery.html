@@ -1,6 +1,89 @@
-<div style="font-family: system-ui, -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #13213A;">
-  <h2 style="font-style: italic; font-weight: 900; letter-spacing: 1px;">LIFT<span style="color: #F5B800;">2</span>LIFT</h2>
-  <p>Enter this code in the app to reset your password:</p>
-  <p style="font-size: 32px; font-weight: 800; letter-spacing: 8px; margin: 16px 0;">{{ .Token }}</p>
-  <p style="color: #586A82; font-size: 14px;">If you didn't ask to reset your password, you can ignore this email.</p>
-</div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light">
+  <title>Reset your Lift2Lift password</title>
+</head>
+<body style="margin:0; padding:0; background-color:#EEF3F7; -webkit-text-size-adjust:100%;">
+  <!-- Inbox preview line (hidden in the email body) -->
+  <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:#EEF3F7; font-size:1px; line-height:1px;">
+    Your password reset code is {{ .Token }}. It expires in 60 minutes.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#EEF3F7;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#13213A; border-radius:16px 16px 0 0; padding:28px 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="vertical-align:middle; padding-right:14px;">
+                    <img src="https://lift2lift.vercel.app/email/icon.png" width="48" height="48" alt="" style="display:block; width:48px; height:48px; border:0; border-radius:12px;">
+                  </td>
+                  <td style="vertical-align:middle; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                    <div style="font-size:26px; line-height:28px; font-weight:900; font-style:italic; letter-spacing:1px; color:#FFFFFF;">LIFT<span style="color:#F5B800;">2</span>LIFT</div>
+                    <div style="font-size:12px; line-height:18px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:#94A4BA; padding-top:2px;">Rides from the Hill &middot; Colorado</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Yellow chairlift-cable stripe -->
+          <tr><td style="background-color:#F5B800; height:4px; line-height:4px; font-size:0;">&nbsp;</td></tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="background-color:#FFFFFF; padding:36px 32px 32px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#13213A;">
+              <h1 style="margin:0 0 12px; font-size:24px; line-height:30px; font-weight:800; color:#13213A;">Reset your password</h1>
+              <p style="margin:0 0 24px; font-size:16px; line-height:24px; color:#3A4A62;">
+                We got a request to reset the password for <strong style="color:#13213A;">{{ .Email }}</strong>. Enter this code in the app, then pick a new password.
+              </p>
+
+              <!-- Code -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="background-color:#F4F7FA; border:1px solid #D3DDE7; border-radius:12px; padding:22px 12px;">
+                    <div style="font-size:12px; line-height:16px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#586A82; padding-bottom:8px;">Your reset code</div>
+                    <div style="font-family:'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size:36px; line-height:44px; font-weight:800; letter-spacing:10px; color:#13213A;">{{ .Token }}</div>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:20px 0 28px; font-size:14px; line-height:21px; color:#586A82; text-align:center;">
+                This code expires in 60 minutes.
+              </p>
+
+              <!-- Divider -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid #E3EAF1; height:1px; line-height:1px; font-size:0; padding-top:28px;">&nbsp;</td></tr></table>
+
+              <p style="margin:0; font-size:14px; line-height:21px; color:#586A82;">
+                Didn't ask to reset your password? You can safely ignore this email. Your password stays the same unless this code is used. Lift2Lift will never ask you for this code by text, phone or chat.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#FFFFFF; border-radius:0 0 16px 16px; border-top:1px solid #E3EAF1; padding:20px 32px 24px; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+              <p style="margin:0; font-size:12px; line-height:18px; color:#8494A8; text-align:center;">
+                Lift2Lift &middot; Ski carpools for CU Boulder students<br>
+                Not affiliated with or endorsed by the University of Colorado.<br>
+                <a href="https://lift2lift.vercel.app/terms" style="color:#586A82; text-decoration:underline;">Terms</a>
+                &nbsp;&middot;&nbsp;
+                <a href="https://lift2lift.vercel.app/privacy" style="color:#586A82; text-decoration:underline;">Privacy</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

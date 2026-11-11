@@ -49,7 +49,7 @@ otp_length = 6
 otp_expiry = 3600
 
 [auth.email.template.confirmation]
-subject = "Your Lift2Lift code"
+subject = "Confirm your Lift2Lift account"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.recovery]
