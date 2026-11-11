@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
+import { ReportSheet } from '../components/Safety';
 import { Button, Card, FormScreen, Heading, Loading, Muted, Notice } from '../components/ui';
 import { clock, dayLabel, isoDay, longDay } from '../lib/dates';
 import { RESORT_BY_ID } from '../lib/resorts';
@@ -339,6 +340,7 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const [reporting, setReporting] = useState<ChatMessage | null>(null);
   const people = useMemo(() => Object.fromEntries([trip.driver, ...trip.passengers].map((p) => [p.id, p])), [trip]);
 
   useEffect(() => {
@@ -394,7 +396,11 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
             return (
               <View key={m.id} style={{ flexDirection: mine ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-end' }}>
                 {!mine ? <Avatar uri={p?.avatarUrl} name={p?.name ?? ''} gender={p?.gender} size={28} /> : null}
-                <View style={{ maxWidth: '78%', gap: 2, alignItems: mine ? 'flex-end' : 'flex-start' }}>
+                <Pressable
+                  onLongPress={mine ? undefined : () => setReporting(m)}
+                  accessibilityHint={mine ? undefined : 'Long press to report this message'}
+                  style={{ maxWidth: '78%', gap: 2, alignItems: mine ? 'flex-end' : 'flex-start' }}
+                >
                   {!mine ? <Text style={{ color: t.muted, fontSize: 11, fontWeight: '700' }}>{p?.name.split(' ')[0] ?? 'Someone'}{m.senderId === trip.driver.id ? ' · driver' : ''}</Text> : null}
                   <View
                     style={{
@@ -408,8 +414,15 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
                   >
                     <Text style={{ color: mine ? t.accentInk : t.ink, fontSize: 15, lineHeight: 20 }}>{m.body}</Text>
                   </View>
-                  <Text style={{ color: t.muted, fontSize: 10 }}>{clock(m.createdAt)}</Text>
-                </View>
+                  <Text style={{ color: t.muted, fontSize: 10 }}>
+                    {clock(m.createdAt)}
+                    {!mine ? (
+                      <Text onPress={() => setReporting(m)} accessibilityRole="button" accessibilityLabel="Report message" style={{ fontWeight: '700' }}>
+                        {'  ·  Report'}
+                      </Text>
+                    ) : null}
+                  </Text>
+                </Pressable>
               </View>
             );
           })}
@@ -442,6 +455,20 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
         <Button small title="Send" loading={sending} disabled={!text.trim()} onPress={() => send(text)} />
       </View>
       {error ? <Notice kind="error">{error}</Notice> : null}
+      {reporting ? (
+        <ReportSheet
+          visible
+          onClose={() => setReporting(null)}
+          userId={reporting.senderId}
+          name={people[reporting.senderId]?.name ?? ''}
+          kind="message"
+          targetId={reporting.id}
+          onBlocked={() => {
+            const gone = reporting.senderId;
+            setMessages((prev) => (prev ?? []).filter((x) => x.senderId !== gone));
+          }}
+        />
+      ) : null}
     </Card>
   );
 }

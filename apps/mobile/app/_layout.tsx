@@ -21,6 +21,7 @@ function RootStack() {
         <Stack.Screen name="post" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="account/index" />
         <Stack.Screen name="account/driver" />
+        <Stack.Screen name="account/blocked" />
         <Stack.Screen name="profile/index" />
         <Stack.Screen name="profile/setup" />
         <Stack.Screen name="u" />
@@ -34,6 +35,9 @@ function RootStack() {
         <Stack.Screen name="verify" />
         <Stack.Screen name="forgot-password" />
       </Stack.Protected>
+      {/* Open signed in or out (linked from sign-up and Account). */}
+      <Stack.Screen name="privacy" />
+      <Stack.Screen name="terms" />
     </Stack>
   );
 }

@@ -70,6 +70,10 @@ verify_jwt = true
 [functions.insurance-check]
 verify_jwt = true
 
+# Account → Delete account. Removes the person's files, then the auth user.
+[functions.delete-account]
+verify_jwt = true
+
 # Stripe calls this one; it checks the Stripe signature instead of a user token.
 [functions.identity-webhook]
 verify_jwt = false

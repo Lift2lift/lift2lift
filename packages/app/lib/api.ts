@@ -1,3 +1,4 @@
+import { TERMS_VERSION } from './legal';
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
@@ -151,7 +152,21 @@ export function createApi(supabase: SupabaseClient): Api {
   let holdEvents = false; // true while a password reset is mid-flight
   const emit = (s: Session | null) => listeners.forEach((l) => l(s));
 
+  // People hidden from me (I blocked them, or they blocked me). Cached briefly, cleared on block changes.
+  let hiddenCache: { ids: Promise<Set<string>>; until: number } | null = null;
+  function hidden() {
+    if (!hiddenCache || hiddenCache.until < Date.now()) {
+      const ids = (async () => {
+        const { data, error } = await supabase.rpc('hidden_people');
+        return new Set<string>(error ? [] : ((data ?? []) as string[]));
+      })();
+      hiddenCache = { ids, until: Date.now() + 60_000 };
+    }
+    return hiddenCache.ids;
+  }
+
   supabase.auth.onAuthStateChange((_event, session) => {
+    hiddenCache = null;
     if (!holdEvents) emit(toSession(session));
   });
 
@@ -188,7 +203,7 @@ export function createApi(supabase: SupabaseClient): Api {
       check(await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } }));
     },
     async signUp(name, email, password) {
-      const { data } = check(await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } }));
+      const { data } = check(await supabase.auth.signUp({ email, password, options: { data: { full_name: name, terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() } } }));
       return { needsVerification: !data.session };
     },
     async verifySignup(email, code) {
@@ -225,7 +240,8 @@ export function createApi(supabase: SupabaseClient): Api {
       const { data } = check(
         await supabase.from('ride_board').select(BOARD_COLUMNS).order('depart_at', { ascending: true }).limit(500),
       );
-      const rows = (data ?? []) as BoardRow[];
+      const hide = await hidden();
+      const rows = ((data ?? []) as BoardRow[]).filter((r) => !hide.has(r.driver_id) && !(r.rider_ids ?? []).some((id) => hide.has(id)));
       const urls = await signAvatars(rows.flatMap((r) => [r.driver_avatar_path, ...(r.rider_avatar_paths ?? [])]));
       return rows.map((r) => toRide(r, urls));
     },
@@ -320,6 +336,8 @@ export function createApi(supabase: SupabaseClient): Api {
     async profileFriends(userId) {
       const { data } = check(await supabase.rpc('profile_friends', { p_user_id: userId }));
       const d = (data ?? { count: 0, mutual: 0, state: 'none', friends: [] }) as { count: number; mutual: number; state: FriendState; friends: FriendRow[] };
+      const hide = await hidden();
+      d.friends = d.friends.filter((p) => !hide.has(p.id));
       const urls = await signAvatars(d.friends.map((p) => p.avatar_path));
       return { count: d.count, mutual: d.mutual, state: d.state, friends: d.friends.map((p) => toFriend(p, urls)) };
     },
@@ -345,6 +363,14 @@ export function createApi(supabase: SupabaseClient): Api {
       const { data } = check(await supabase.rpc('profile_page', { p_user_id: userId }));
       const p = data as ProfileRow | null;
       if (!p) return null;
+      const hide = await hidden();
+      let blockedByMe = false;
+      if (hide.has(p.id)) {
+        const { data: mine } = await supabase.from('user_blocks').select('blocked_id').eq('blocked_id', p.id).maybeSingle();
+        // Someone who blocked me looks like a missing profile.
+        if (!mine) return null;
+        blockedByMe = true;
+      }
       const urls = await signAvatars([p.avatar_path]);
       const page: ProfilePage = {
         id: p.id,
@@ -372,6 +398,7 @@ export function createApi(supabase: SupabaseClient): Api {
           seatsTotal: u.seats_total,
           seatsTaken: u.seats_taken,
         })),
+        blockedByMe,
       };
       return page;
     },
@@ -571,7 +598,8 @@ export function createApi(supabase: SupabaseClient): Api {
       const { data } = check(
         await supabase.from('ride_messages').select('id, ride_id, sender_id, body, created_at, kind').eq('ride_id', rideId).order('created_at').limit(500),
       );
-      return ((data ?? []) as MessageRow[]).map(toMessage);
+      const hide = await hidden();
+      return ((data ?? []) as MessageRow[]).filter((m) => !hide.has(m.sender_id)).map(toMessage);
     },
     async sendMessage(rideId, body) {
       check(await supabase.from('ride_messages').insert({ ride_id: rideId, body: body.trim().slice(0, 1000) }));
@@ -579,9 +607,10 @@ export function createApi(supabase: SupabaseClient): Api {
     subscribeMessages(rideId, onMessage) {
       const channel = supabase
         .channel(`ride-chat-${rideId}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, (payload) =>
-          onMessage(toMessage(payload.new as MessageRow)),
-        )
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ride_messages', filter: `ride_id=eq.${rideId}` }, async (payload) => {
+          const m = payload.new as MessageRow;
+          if (!(await hidden()).has(m.sender_id)) onMessage(toMessage(m));
+        })
         .subscribe();
       return () => {
         supabase.removeChannel(channel);
@@ -595,6 +624,45 @@ export function createApi(supabase: SupabaseClient): Api {
     },
     async registerPushToken(token, platform) {
       check(await supabase.rpc('register_push_token', { p_token: token, p_platform: platform }));
+    },
+
+    async report(r) {
+      check(
+        await supabase.rpc('report_content', {
+          p_user_id: r.userId,
+          p_kind: r.kind,
+          p_target_id: r.targetId ?? null,
+          p_reason: r.reason,
+          p_details: (r.details ?? '').trim().slice(0, 1000),
+        }),
+      );
+    },
+    async blockUser(userId) {
+      check(await supabase.rpc('block_user', { p_user_id: userId }));
+      hiddenCache = null;
+    },
+    async unblockUser(userId) {
+      check(await supabase.rpc('unblock_user', { p_user_id: userId }));
+      hiddenCache = null;
+    },
+    async myBlocks() {
+      const { data } = check(await supabase.rpc('my_blocks'));
+      const rows = (data ?? []) as (FriendRow & { blocked_at: string })[];
+      const urls = await signAvatars(rows.map((p) => p.avatar_path));
+      return rows.map((p) => ({ ...toFriend(p, urls), blockedAt: p.blocked_at }));
+    },
+    async deleteAccount() {
+      const { data, error } = await supabase.functions.invoke('delete-account', { body: { confirm: 'DELETE' } });
+      if (error || !(data as { deleted?: boolean } | null)?.deleted) {
+        let msg = 'Could not delete your account. Try again.';
+        try {
+          const body = await (error as { context?: Response } | null)?.context?.json?.();
+          if (body?.error) msg = body.error;
+        } catch {}
+        throw new Error(msg);
+      }
+      // The user is gone on the server; clear the saved session on this device.
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
     },
 
   };

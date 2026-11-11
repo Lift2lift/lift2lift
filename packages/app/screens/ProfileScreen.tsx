@@ -3,6 +3,7 @@ import { Linking, Platform, Pressable, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
 import { Stars } from '../components/Stars';
+import { ProfileSafetyActions, ReportSheet } from '../components/Safety';
 import { Button, Card, FormScreen, Label, Loading, Notice } from '../components/ui';
 import { SCHOOL_NAME } from '../lib/config';
 import { clock, DOW, MON } from '../lib/dates';
@@ -81,6 +82,8 @@ function RatingsSection({
 }) {
   const t = useTheme();
   const nav = useNav();
+  const { session } = useAuth();
+  const [reporting, setReporting] = useState<Review | null>(null);
   const s = data.summary;
   const shown = data.reviews.filter((r) => tab === 'all' || r.role === tab);
   const tabs: { id: typeof tab; label: string; n: number }[] = [
@@ -150,10 +153,25 @@ function RatingsSection({
                   </View>
                 </View>
                 {r.body ? <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22 }}>{r.body}</Text> : null}
+                {r.reviewerId !== session?.userId ? (
+                  <Pressable onPress={() => setReporting(r)} accessibilityRole="button" accessibilityLabel={`Report ${r.reviewerName}'s review`} hitSlop={8} style={{ alignSelf: 'flex-start' }}>
+                    <Text style={{ color: t.muted, fontSize: 13, fontWeight: '700' }}>Report review</Text>
+                  </Pressable>
+                ) : null}
               </Card>
             );
           })}
         </>
+      ) : null}
+      {reporting ? (
+        <ReportSheet
+          visible
+          onClose={() => setReporting(null)}
+          userId={reporting.reviewerId}
+          name={reporting.reviewerName}
+          kind="review"
+          targetId={reporting.id}
+        />
       ) : null}
     </View>
   );
@@ -196,13 +214,15 @@ export function ProfileScreen({ userId }: { userId?: string }) {
     api.getReviews(id).then(setRatings).catch(() => {});
   }, [api, id]);
 
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     if (!id) return;
     api
       .getProfile(id)
       .then((x) => (x ? setP(x) : setError("That profile doesn't exist.")))
       .catch((e: Error) => setError(e.message));
-  }, [api, id]);
+  }, [api, id, reload]);
+  const [unblocking, setUnblocking] = useState(false);
 
   if (error) {
     return (
@@ -224,6 +244,36 @@ export function ProfileScreen({ userId }: { userId?: string }) {
   const since = new Date(p.memberSince);
   const prompts = PROFILE_PROMPTS.filter((q) => p.prompts[q.key]);
   const first = p.fullName.split(' ')[0] || 'They';
+
+  if (p.blockedByMe) {
+    return (
+      <FormScreen header={<AppHeader />}>
+        <View style={{ alignItems: 'center', gap: 10 }}>
+          <Text style={{ color: t.ink, fontSize: 26, fontWeight: '900', textAlign: 'center' }}>{p.fullName || 'Lift2Lift member'}</Text>
+          <Text style={{ color: t.muted, fontSize: 15, textAlign: 'center' }}>
+            You blocked {first}. You don't see each other's rides, messages or reviews.
+          </Text>
+        </View>
+        <Button
+          variant="ghost"
+          title={`Unblock ${first}`}
+          loading={unblocking}
+          onPress={async () => {
+            setUnblocking(true);
+            try {
+              await api.unblockUser(p.id);
+              setReload((n) => n + 1);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setUnblocking(false);
+            }
+          }}
+        />
+        <Button variant="ghost" title="Back to rides" onPress={() => nav.replace('/')} />
+      </FormScreen>
+    );
+  }
 
   return (
     <FormScreen header={<AppHeader />}>
@@ -257,6 +307,7 @@ export function ProfileScreen({ userId }: { userId?: string }) {
             {friends.state === 'received' ? <Text style={{ color: t.muted, fontSize: 13 }}>{first} sent you a friend request.</Text> : null}
           </View>
         ) : null}
+        {!mine ? <ProfileSafetyActions userId={p.id} name={p.fullName} onBlocked={() => setReload((n) => n + 1)} /> : null}
       </View>
 
       {mine && requests ? (

@@ -149,7 +149,24 @@ export type ProfilePage = ProfileFields & {
   ridesDriven: number;
   ridesTaken: number;
   upcoming: { id: string; resortId: string; departAt: string; seatsTotal: number; seatsTaken: number }[];
+  /** You blocked this person. The profile shows only their name and an Unblock button. */
+  blockedByMe: boolean;
 };
+
+/* ---------- Safety: reports and blocks ---------- */
+
+export type ReportKind = 'profile' | 'message' | 'review' | 'ride';
+export type ReportReason = 'harassment' | 'hate' | 'sexual' | 'spam' | 'unsafe_driving' | 'fake_profile' | 'other';
+export const REPORT_REASONS: { id: ReportReason; label: string }[] = [
+  { id: 'harassment', label: 'Harassment or bullying' },
+  { id: 'hate', label: 'Hate speech or slurs' },
+  { id: 'sexual', label: 'Sexual content or unwanted advances' },
+  { id: 'unsafe_driving', label: 'Unsafe driving' },
+  { id: 'fake_profile', label: 'Fake profile or not a student' },
+  { id: 'spam', label: 'Spam or scam' },
+  { id: 'other', label: 'Something else' },
+];
+export type BlockedPerson = Person & { blockedAt: string };
 
 /** Documents drivers upload themselves. (The license is scanned in the ID check.) */
 /** Stripe Identity: license scan + live selfie matched to the license photo. */
@@ -294,4 +311,13 @@ export interface Api {
   /** Driver: mark a passenger picked up or a no-show. */
   confirmPassenger(rideId: string, leg: Leg, riderId: string, status: 'picked_up' | 'no_show'): Promise<void>;
   registerPushToken(token: string, platform: 'ios' | 'android' | 'web'): Promise<void>;
+
+  /** Report a person, or one of their chat messages, reviews or rides. Moderators review reports within 24 hours. */
+  report(r: { userId: string; kind: ReportKind; targetId?: string | null; reason: ReportReason; details?: string }): Promise<void>;
+  /** Hides each person from the other: rides, chat, reviews, search, friends. Ends any friendship. */
+  blockUser(userId: string): Promise<void>;
+  unblockUser(userId: string): Promise<void>;
+  myBlocks(): Promise<BlockedPerson[]>;
+  /** Permanently deletes the account, photos and everything linked to it, then signs out. */
+  deleteAccount(): Promise<void>;
 }

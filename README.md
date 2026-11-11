@@ -60,7 +60,9 @@ supabase/
   2. **Insurance card photo**, stored privately.
 
   Once both are done they can host right away, and riders see **“ID verified · insurance on file”**.
-- **Account settings**: name, CU email status, driver verification, sign out.
+- **Account settings**: name, CU email status, driver verification, blocked people, terms, privacy policy, contact support, sign out, and **Delete account** (type DELETE, then confirm). Deleting removes the auth user, which cascades to every table, and the `delete-account` edge function also removes the person's photos and driver documents.
+- **Safety (App Review 1.2)**: sign-up requires agreeing to the Terms and community guidelines, which have zero tolerance for abuse. Anyone can **report** a profile, a chat message or a review (`report_content`, stored in `reports` with a copy of the text) and **block** a person. Blocking hides each person from the other: rides, profile, chat, reviews, search and friends. It also ends any friendship and stops them booking the same ride. Chat messages, reviews and profile text containing a word in `blocked_terms` are rejected. Reports go to the `reports` table: set up a database webhook so a person sees each one within 24 hours (see `docs/app-store-submission.md`).
+- **Privacy policy and terms**: `/privacy` and `/terms`, on the web and in the app, open signed in or out. The text lives in `packages/app/lib/legal.ts`.
 - **Colorado carpool rules**: built in and enforced by the database (see below).
 - **Snow**: the biggest snow days this week, plus a 7-day grid for every Colorado ski area, sortable by drive time or total snow. Tap a mountain to see rides there.
 
@@ -79,6 +81,8 @@ Lift2Lift is built to qualify as a **carpooling service internet application** u
 | Trips 23+ miles, or to or from a ski area | Every destination is a ski area |
 
 ### Before launch
+
+- [ ] **App Store**: follow `docs/app-store-submission.md` (support email, EAS project, demo accounts, report alerts, App Privacy answers, review notes).
 
 - [ ] **Register with CDOT.** The law requires carpool apps to register with the Colorado Department of Transportation every year. Ask CDOT how to register.
 - [ ] **Check the mileages.** `round_trip_miles` in `supabase/migrations/…_colorado_carpool_rules.sql` (and `packages/app/lib/resorts.ts`) are conservative estimates from Boulder. Confirm them with a mapping tool.
@@ -238,14 +242,14 @@ The iPhone app asks to allow notifications the first time someone has a booked r
 | `identity-start` edge function | Starts or resumes a Stripe check (license only, live capture, matching selfie) | Signed-in users |
 | `identity-webhook` edge function | Verifies Stripe's signature, saves the result, redacts images | Stripe |
 
-The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), consent, photo privacy, face mismatch then retry, stale Stripe events, no self-approval, rejection and resubmission. `trips_test.sql` covers round-trip and one-way gas caps, booking legs (one up plus a different one down is fine, two on the same leg isn't), per-leg seat limits, chat privacy, check-in windows and permissions, and that each reminder is sent once. `friends_test.sql` covers requests, accepting by asking back, declining, unfriending, mutual friends, privacy and search (wildcards are taken literally). `ride_edits_test.sql` covers what can change once riders are booked, the chat update lines, update and cancel pushes, reminder resets and locking finished rides. To run them against plain Postgres:
+The rules are tested in `supabase/tests/`. `policies_test.sql` covers sign-up, seat limits, contact privacy and blocking edits to other people's rides. `colorado_rules_test.sql` covers gas caps, 6 seats, one ride per person per day, the 2-hour window, and cancelling to free up a day. `verification_test.sql` covers the CU email rule (including look-alike domains), consent, photo privacy, face mismatch then retry, stale Stripe events, no self-approval, rejection and resubmission. `trips_test.sql` covers round-trip and one-way gas caps, booking legs (one up plus a different one down is fine, two on the same leg isn't), per-leg seat limits, chat privacy, check-in windows and permissions, and that each reminder is sent once. `friends_test.sql` covers requests, accepting by asking back, declining, unfriending, mutual friends, privacy and search (wildcards are taken literally). `ride_edits_test.sql` covers what can change once riders are booked, the chat update lines, update and cancel pushes, reminder resets and locking finished rides. `safety_test.sql` covers blocking (hidden chat, search and friends; no booking together; the blocked person can't see who blocked them), reports, the word filter (whole words only) and that deleting an account removes everything linked to it. To run them against plain Postgres:
 
 ```bash
 psql "$DB" -f supabase/tests/supabase_stub.sql $(for f in supabase/migrations/*.sql; do printf -- "-f %s " "$f"; done) \
   -f supabase/seed.sql -f supabase/tests/helpers.sql \
   -f supabase/tests/policies_test.sql -f supabase/tests/colorado_rules_test.sql -f supabase/tests/verification_test.sql \
   -f supabase/tests/reviews_test.sql -f supabase/tests/trips_test.sql \
-  -f supabase/tests/friends_test.sql -f supabase/tests/ride_edits_test.sql
+  -f supabase/tests/friends_test.sql -f supabase/tests/ride_edits_test.sql -f supabase/tests/safety_test.sql
 ```
 
 ## Options
