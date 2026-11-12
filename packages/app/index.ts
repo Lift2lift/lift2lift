@@ -17,6 +17,8 @@ export { ProfileSetupScreen } from './screens/ProfileSetupScreen';
 export { ReviewScreen } from './screens/ReviewScreen';
 export { YourRidesScreen } from './screens/YourRidesScreen';
 export { FriendsScreen } from './screens/FriendsScreen';
+export { IntroSplash } from './components/IntroSplash';
+export { PersonAvatar, PersonChip, WhosInTheCar } from './components/People';
 export { LegalScreen, BlockedPeopleScreen } from './screens/SafetyScreens';
 export { PRIVACY_POLICY, TERMS, TERMS_VERSION } from './lib/legal';
 export { SITE_URL, SUPPORT_EMAIL } from './lib/config';

@@ -31,6 +31,7 @@ Notifications.setNotificationHandler({
 
 export const nativeDevice: DeviceServices = {
   platform: 'ios',
+  logo: require('../assets/icon.png'),
 
   /**
    * Asks to send notifications and returns this phone's Expo push token. The

@@ -6,6 +6,7 @@ import { RESORT_BY_ID } from '../lib/resorts';
 import { bookingClosed } from '../lib/rules';
 import { legAt, oneWayShare, seatLegs, seatsOpen, TRIP_LABEL, tripLegs } from '../lib/trips';
 import { Avatar } from './Avatar';
+import { PersonChip } from './People';
 import { RatingBadge } from './Stars';
 import { useTheme } from '../lib/theme';
 import type { BoardRide, Forecast, Leg, SeatLegs } from '../lib/types';
@@ -344,30 +345,35 @@ export function RideCard({
 
         {ride.notes ? <Text style={{ color: t.ink, fontSize: 14, lineHeight: 20 }}>{ride.notes}</Text> : null}
 
-        {mine && ride.riderNames.length ? (
+        {/* Who's booked: shown to the driver and to riders on this ride (not to everyone browsing). */}
+        {(mine || riding) && ride.riderIds.length ? (
           <View style={{ gap: 6 }}>
-            <Text style={{ color: t.muted, fontSize: 13 }}>Riding with you:</Text>
+            <Text style={{ color: t.muted, fontSize: 13 }}>{mine ? 'Riding with you:' : `In the car with ${firstName}:`}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {ride.riderNames.map((name, i) => (
-                <View key={ride.riderIds[i]} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.chip, borderRadius: 999, paddingLeft: 3, paddingRight: 6, paddingVertical: 3 }}>
-                  <Avatar uri={ride.riderAvatarUrls[i]} name={name} gender={ride.riderGenders[i]} size={26} />
-                  <Text
-                    onPress={() => nav.push('/u', { id: ride.riderIds[i] })}
-                    accessibilityRole="link"
-                    style={{ color: t.ink, fontSize: 13, fontWeight: '600' }}
-                  >
-                    {name || 'Rider'}
-                  </Text>
-                  <Text
-                    onPress={() => run(() => api.removeRider(ride.id, ride.riderIds[i]), `${name || 'Rider'} removed from your ride.`)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove ${name}`}
-                    style={{ color: t.muted, fontSize: 13, paddingHorizontal: 4 }}
-                  >
-                    ✕
-                  </Text>
-                </View>
-              ))}
+              {ride.riderIds.map((id, i) => {
+                const person = { id, name: ride.riderNames[i] ?? '', avatarUrl: ride.riderAvatarUrls[i] ?? null, gender: ride.riderGenders[i] ?? null };
+                const legs = ride.riderLegs[i];
+                const note = id === me ? 'you' : ride.tripType === 'round_trip' && legs && legs !== 'both' ? (legs === 'to' ? 'up only' : 'down only') : undefined;
+                return (
+                  <PersonChip
+                    key={id}
+                    person={person}
+                    note={note}
+                    after={
+                      mine ? (
+                        <Text
+                          onPress={() => run(() => api.removeRider(ride.id, id), `${person.name || 'Rider'} removed from your ride.`)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${person.name}`}
+                          style={{ color: t.muted, fontSize: 13, paddingHorizontal: 8, paddingVertical: 6 }}
+                        >
+                          ✕
+                        </Text>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
             </View>
           </View>
         ) : null}

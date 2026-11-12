@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
+import { PersonAvatar, WhosInTheCar } from '../components/People';
 import { ReportSheet } from '../components/Safety';
 import { Button, Card, FormScreen, Heading, Loading, Muted, Notice } from '../components/ui';
 import { clock, dayLabel, isoDay, longDay } from '../lib/dates';
@@ -127,9 +128,9 @@ function LegCard({ e, now, big }: { e: LegEvent; now: number; big?: boolean }) {
         {big ? '' : ` · in ${countdown(ms)}`}
       </Text>
       <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
-        <Avatar uri={e.trip.driver.avatarUrl} name={e.trip.driver.name} gender={e.trip.driver.gender} size={30} />
+        <PersonAvatar person={e.trip.driver} size={30} />
         {people.map((p) => (
-          <Avatar key={p.id} uri={p.avatarUrl} name={p.name} gender={p.gender} size={30} />
+          <PersonAvatar key={p.id} person={p} size={30} />
         ))}
         <Text style={{ color: big ? t.headerInk : t.muted, fontSize: 13, marginLeft: 6 }}>
           {people.length + 1} in the car
@@ -251,9 +252,9 @@ function RideDay({ event: e, locked }: { event: LegEvent; locked: boolean }) {
             const c = checkin(p.id);
             return (
               <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <Avatar uri={p.avatarUrl} name={p.name} gender={p.gender} size={40} />
+                <PersonAvatar person={p} size={40} />
                 <View style={{ flex: 1, minWidth: 120 }}>
-                  <Text style={{ color: t.ink, fontWeight: '700', fontSize: 15 }}>{p.name}</Text>
+                  <Text onPress={() => nav.push('/u', { id: p.id })} accessibilityRole="link" style={{ color: t.ink, fontWeight: '700', fontSize: 15 }}>{p.name}</Text>
                   <Text style={{ color: c?.riderConfirmedAt ? t.ok : t.muted, fontSize: 12, fontWeight: '700' }}>
                     {c?.driverStatus === 'picked_up' ? '✓ Picked up' : c?.driverStatus === 'no_show' ? 'No-show' : c?.riderConfirmedAt ? 'Says they’re here' : 'Not checked in yet'}
                   </Text>
@@ -277,15 +278,12 @@ function RideDay({ event: e, locked }: { event: LegEvent; locked: boolean }) {
           <Button title="I'm here, confirm my seat" loading={busy === 'me'} onPress={() => act('me', () => api.confirmMySeat(trip.id, e.leg))} />
         ) : null}
 
-        {!isDriver ? (
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Text style={{ color: t.muted, fontSize: 13 }}>In the car:</Text>
-            {[trip.driver, ...people].map((p) => (
-              <Avatar key={p.id} uri={p.avatarUrl} name={p.name} gender={p.gender} size={28} />
-            ))}
-          </View>
-        ) : null}
         {error ? <Notice kind="error">{error}</Notice> : null}
+      </Card>
+
+      {/* Everyone on this leg; tap anyone to see their profile */}
+      <Card style={{ padding: 16 }}>
+        <WhosInTheCar driver={trip.driver} riders={people} meId={me} roundTrip={trip.tripType === 'round_trip'} />
       </Card>
 
       <Chat trip={trip} meId={me} />
@@ -335,6 +333,7 @@ const QUICK = ['On my way', "I'm here", 'Running 5 min late', 'Where are you par
 function Chat({ trip, meId }: { trip: Trip; meId: string }) {
   const t = useTheme();
   const api = useApi();
+  const nav = useNav();
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -395,13 +394,13 @@ function Chat({ trip, meId }: { trip: Trip; meId: string }) {
             const p = people[m.senderId];
             return (
               <View key={m.id} style={{ flexDirection: mine ? 'row-reverse' : 'row', gap: 8, alignItems: 'flex-end' }}>
-                {!mine ? <Avatar uri={p?.avatarUrl} name={p?.name ?? ''} gender={p?.gender} size={28} /> : null}
+                {!mine ? p ? <PersonAvatar person={p} size={28} /> : <Avatar uri={null} name="" gender={null} size={28} /> : null}
                 <Pressable
                   onLongPress={mine ? undefined : () => setReporting(m)}
                   accessibilityHint={mine ? undefined : 'Long press to report this message'}
                   style={{ maxWidth: '78%', gap: 2, alignItems: mine ? 'flex-end' : 'flex-start' }}
                 >
-                  {!mine ? <Text style={{ color: t.muted, fontSize: 11, fontWeight: '700' }}>{p?.name.split(' ')[0] ?? 'Someone'}{m.senderId === trip.driver.id ? ' · driver' : ''}</Text> : null}
+                  {!mine ? <Text onPress={p ? () => nav.push('/u', { id: p.id }) : undefined} style={{ color: t.muted, fontSize: 11, fontWeight: '700' }}>{p?.name.split(' ')[0] ?? 'Someone'}{m.senderId === trip.driver.id ? ' · driver' : ''}</Text> : null}
                   <View
                     style={{
                       backgroundColor: mine ? t.accent : t.chip,

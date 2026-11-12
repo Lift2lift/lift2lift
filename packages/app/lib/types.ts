@@ -212,6 +212,8 @@ export interface DeviceServices {
   openIdentityCheck(url: string): Promise<void>;
   /** Asks to allow notifications and returns this phone's push token, or null (web, or declined). */
   registerForPush(): Promise<{ token: string; platform: 'ios' | 'android' | 'web' } | null>;
+  /** The app icon for the opening screen: require('../assets/icon.png') on iOS, { uri: '/logo.png' } on the web. */
+  logo?: number | { uri: string };
 }
 
 export type NewRide = {
