@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { TabBar } from '../components/TabBar';
-import { Card, Chip, Loading, Notice } from '../components/ui';
+import { Button, Card, Chip, Loading, Notice } from '../components/ui';
 import { DOW, driveText, isoDay, longDay, parseDay } from '../lib/dates';
 import { RESORTS } from '../lib/resorts';
 import { mix, useTheme } from '../lib/theme';
@@ -15,7 +15,7 @@ const DAY_COL = 70;
 export function SnowScreen() {
   const t = useTheme();
   const nav = useNav();
-  const { forecast, error } = useForecast();
+  const { forecast, error, retry } = useForecast();
   const [sort, setSort] = useState<'drive' | 'snow'>('drive');
   const today = isoDay(new Date());
 
@@ -59,7 +59,12 @@ export function SnowScreen() {
             ) : null}
           </View>
 
-          {error ? <Notice kind="error">{error}</Notice> : null}
+          {error && !forecast ? (
+            <View style={{ gap: 10 }}>
+              <Notice kind="error">{error}</Notice>
+              <Button variant="ghost" title="Try again" onPress={retry} />
+            </View>
+          ) : null}
           {!forecast && !error ? <Loading label="Loading forecasts for 26 mountains…" /> : null}
 
           {forecast ? (
