@@ -10,28 +10,11 @@ import { Button, Chip, Loading, Notice } from '../components/ui';
 import { addDays, dayLabel, driveText, isoDay, longDay } from '../lib/dates';
 import { isPassFilter, PASS_LABEL, PASS_NOTES, PASS_SEASON, passesFor } from '../lib/passes';
 import { RESORT_BY_ID } from '../lib/resorts';
-import { CARPOOL_DISCLAIMER } from '../lib/rules';
 import { useTheme } from '../lib/theme';
 import { seatLegs, seatsOpen, tripLegs } from '../lib/trips';
 import type { BoardRide, Leg, PendingReview } from '../lib/types';
 import { useForecast } from '../lib/useForecast';
 import { useApi, useAuth, useNav } from '../providers';
-
-/**
- * The disclaimer Colorado requires carpool apps to show "in a conspicuous manner"
- * (C.R.S. 43-1-127(1)(c)), word for word, in a box above each mountain's rides.
- */
-function CarpoolNotice() {
-  const t = useTheme();
-  return (
-    <View
-      style={{ backgroundColor: t.surface, borderWidth: 1, borderColor: t.line, borderLeftWidth: 4, borderLeftColor: t.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 4 }}
-    >
-      <Text style={{ color: t.ink, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>COLORADO CARPOOL NOTICE</Text>
-      <Text style={{ color: t.ink, fontSize: 14, lineHeight: 20 }}>{CARPOOL_DISCLAIMER}</Text>
-    </View>
-  );
-}
 
 export function RideBoardScreen({
   initialResort,
@@ -231,8 +214,6 @@ export function RideBoardScreen({
             </View>
           ) : null}
 
-          {/* C.R.S. 43-1-127(1)(c): the exact disclaimer, shown conspicuously where people pick a ride. */}
-          {resort ? <CarpoolNotice /> : null}
 
           {(resort ? [] : toReview).map((r) => {
             const driver = r.people.find((p) => p.role === 'driver');
