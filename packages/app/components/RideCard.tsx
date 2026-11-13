@@ -3,9 +3,10 @@ import { Modal, Platform, Pressable, Text, View } from 'react-native';
 import { clock, driveText, DOW, isoDay, MON } from '../lib/dates';
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID } from '../lib/resorts';
-import { bookingClosed } from '../lib/rules';
+import { bookingClosed, CARPOOL_DISCLAIMER } from '../lib/rules';
 import { legAt, oneWayShare, seatLegs, seatsOpen, TRIP_LABEL, tripLegs } from '../lib/trips';
 import { Avatar } from './Avatar';
+import { PersonChip } from './People';
 import { RatingBadge } from './Stars';
 import { useTheme } from '../lib/theme';
 import type { BoardRide, Forecast, Leg, SeatLegs } from '../lib/types';
@@ -67,11 +68,18 @@ export function RideCard({
   const myLegs = riding ? ride.riderLegs[ride.riderIds.indexOf(me!)] ?? 'both' : null;
   const firstName = ride.driverName.split(' ')[0] || 'the driver';
   const friendsRiding = friendIds ? ride.riderIds.filter((id) => friendIds.has(id)).length : 0;
-  // Booking: pick legs (round trips), then confirm one way if it's one way.
-  const [sheet, setSheet] = useState<null | 'legs' | { oneWay: SeatLegs; leg: Leg }>(null);
-  const book = (l: SeatLegs) => {
+  // Booking: pick legs (round trips), confirm one way if it's one way, then acknowledge
+  // Colorado's carpool notice (C.R.S. 43-1-127(1)(c)) before the seat is claimed. Every booking.
+  const [sheet, setSheet] = useState<null | 'legs' | { oneWay: SeatLegs; leg: Leg } | { notice: SeatLegs }>(null);
+  const book = (l: SeatLegs) => setSheet({ notice: l });
+  const acknowledgeAndBook = (l: SeatLegs) => {
     setSheet(null);
-    run(() => api.claimSeat(ride.id, l), `Seat saved. It's in Your Rides, and ${firstName} is in your ride chat.`);
+    run(() => api.claimSeat(ride.id, l, true), `Seat saved. It's in Your Rides, and ${firstName} is in your ride chat.`);
+  };
+  const bookingLine = (l: SeatLegs) => {
+    const what = ride.tripType !== 'round_trip' ? TRIP_LABEL[ride.tripType] : l === 'both' ? 'Round trip' : l === 'to' ? 'Ride up only' : 'Ride down only';
+    const gas = ride.tripType === 'round_trip' && l !== 'both' ? oneWayShare(ride.gasPerRider) : ride.gasPerRider;
+    return `${what} with ${firstName} · ${DOW[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()} · ${gas > 0 ? `$${gas} gas` : 'free'}`;
   };
   const choose = (l: SeatLegs) => {
     const covered = seatLegs(ride.tripType, l);
@@ -178,6 +186,19 @@ export function RideCard({
                     </Pressable>
                   );
                 })}
+                <Button variant="ghost" title="Cancel" onPress={() => setSheet(null)} />
+              </>
+            ) : sheet && 'notice' in sheet ? (
+              <>
+                <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>BEFORE YOU BOOK</Text>
+                <Text style={{ color: t.ink, fontSize: 24, fontWeight: '900' }} accessibilityRole="header">
+                  Colorado carpool notice
+                </Text>
+                <View style={{ borderLeftWidth: 4, borderLeftColor: t.accent, paddingLeft: 12 }}>
+                  <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22 }}>{CARPOOL_DISCLAIMER}</Text>
+                </View>
+                <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>{bookingLine(sheet.notice)}</Text>
+                <Button title="Acknowledge and book" loading={busy} onPress={() => acknowledgeAndBook(sheet.notice)} />
                 <Button variant="ghost" title="Cancel" onPress={() => setSheet(null)} />
               </>
             ) : sheet ? (
@@ -344,33 +365,40 @@ export function RideCard({
 
         {ride.notes ? <Text style={{ color: t.ink, fontSize: 14, lineHeight: 20 }}>{ride.notes}</Text> : null}
 
-        {mine && ride.riderNames.length ? (
+        {/* Who's in the car: every rider on this ride, for everyone looking at the board. Tap a name for their profile. */}
+        {ride.riderIds.length ? (
           <View style={{ gap: 6 }}>
-            <Text style={{ color: t.muted, fontSize: 13 }}>Riding with you:</Text>
+            <Text style={{ color: t.ink, fontSize: 13, fontWeight: '700' }}>{mine ? 'Riding with you:' : `In the car with ${firstName}:`}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {ride.riderNames.map((name, i) => (
-                <View key={ride.riderIds[i]} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: t.chip, borderRadius: 999, paddingLeft: 3, paddingRight: 6, paddingVertical: 3 }}>
-                  <Avatar uri={ride.riderAvatarUrls[i]} name={name} gender={ride.riderGenders[i]} size={26} />
-                  <Text
-                    onPress={() => nav.push('/u', { id: ride.riderIds[i] })}
-                    accessibilityRole="link"
-                    style={{ color: t.ink, fontSize: 13, fontWeight: '600' }}
-                  >
-                    {name || 'Rider'}
-                  </Text>
-                  <Text
-                    onPress={() => run(() => api.removeRider(ride.id, ride.riderIds[i]), `${name || 'Rider'} removed from your ride.`)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove ${name}`}
-                    style={{ color: t.muted, fontSize: 13, paddingHorizontal: 4 }}
-                  >
-                    ✕
-                  </Text>
-                </View>
-              ))}
+              {ride.riderIds.map((id, i) => {
+                const person = { id, name: ride.riderNames[i] ?? '', avatarUrl: ride.riderAvatarUrls[i] ?? null, gender: ride.riderGenders[i] ?? null };
+                const legs = ride.riderLegs[i];
+                const note = id === me ? 'you' : ride.tripType === 'round_trip' && legs && legs !== 'both' ? (legs === 'to' ? 'up only' : 'down only') : undefined;
+                return (
+                  <PersonChip
+                    key={id}
+                    person={person}
+                    note={note}
+                    after={
+                      mine ? (
+                        <Text
+                          onPress={() => run(() => api.removeRider(ride.id, id), `${person.name || 'Rider'} removed from your ride.`)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${person.name}`}
+                          style={{ color: t.muted, fontSize: 13, paddingHorizontal: 8, paddingVertical: 6 }}
+                        >
+                          ✕
+                        </Text>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
             </View>
           </View>
-        ) : null}
+        ) : (
+          <Text style={{ color: t.muted, fontSize: 13 }}>{mine ? 'No riders yet.' : `No one's riding with ${firstName} yet.`}</Text>
+        )}
 
         <View
           style={{

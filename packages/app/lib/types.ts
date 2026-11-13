@@ -212,6 +212,8 @@ export interface DeviceServices {
   openIdentityCheck(url: string): Promise<void>;
   /** Asks to allow notifications and returns this phone's push token, or null (web, or declined). */
   registerForPush(): Promise<{ token: string; platform: 'ios' | 'android' | 'web' } | null>;
+  /** The app icon for the opening screen: require('../assets/icon.png') on iOS, { uri: '/logo.png' } on the web. */
+  logo?: number | { uri: string };
 }
 
 export type NewRide = {
@@ -262,7 +264,8 @@ export interface Api {
   listRides(): Promise<BoardRide[]>;
   postRide(ride: NewRide): Promise<void>;
   cancelRide(rideId: string): Promise<void>;
-  claimSeat(rideId: string, legs?: SeatLegs): Promise<void>;
+  /** Books a seat. `acknowledgedNotice` must be true: the rider tapped "Acknowledge and book" on the Colorado carpool notice. */
+  claimSeat(rideId: string, legs: SeatLegs, acknowledgedNotice: boolean): Promise<void>;
   leaveSeat(rideId: string): Promise<void>;
   removeRider(rideId: string, riderId: string): Promise<void>;
   rideContact(rideId: string): Promise<string | null>;

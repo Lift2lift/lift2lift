@@ -29,7 +29,7 @@ do $$ begin
   exception when insufficient_privilege then null;
   end;
   begin
-    perform public.claim_seat(gen_random_uuid());
+    perform public.claim_seat(gen_random_uuid(), 'both', true);
     raise exception 'FAIL: anon called claim_seat';
   exception when insufficient_privilege then null;
   end;
@@ -55,8 +55,8 @@ begin
   assert public.ride_contact(v_ride) is null, 'contact hidden before claiming a seat';
 
   -- Claim a seat, then the contact appears.
-  perform public.claim_seat(v_ride);
-  perform public.claim_seat(v_ride); -- second call is a no-op
+  perform public.claim_seat(v_ride, 'both', true);
+  perform public.claim_seat(v_ride, 'both', true); -- second call is a no-op
   assert (select seats_taken from public.ride_board where id = v_ride) = 1, 'seat counted once';
   assert public.ride_contact(v_ride) = '@demo.driver', 'contact visible after claiming';
   assert (select rider_names from public.ride_board where id = v_ride) = array['New Student'], 'rider name shown';
@@ -105,7 +105,7 @@ begin
 
   -- Can't claim own ride.
   begin
-    perform public.claim_seat((select id from public.rides where resort_id = 'breck'));
+    perform public.claim_seat((select id from public.rides where resort_id = 'breck'), 'both', true);
     raise exception 'FAIL: claimed own ride';
   exception when raise_exception then
     assert sqlerrm = 'You''re driving this one.', sqlerrm;
@@ -117,14 +117,14 @@ reset role;
 set role authenticated;
 select set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222', false);
 do $$ begin
-  perform public.claim_seat((select id from public.rides where resort_id = 'breck'));
+  perform public.claim_seat((select id from public.rides where resort_id = 'breck'), 'both', true);
 end $$;
 reset role;
 select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
 set role authenticated;
 do $$ begin
   begin
-    perform public.claim_seat((select id from public.rides where resort_id = 'breck'));
+    perform public.claim_seat((select id from public.rides where resort_id = 'breck'), 'both', true);
     raise exception 'FAIL: claimed a full ride';
   exception when raise_exception then
     assert sqlerrm = 'The ride up is full.', sqlerrm;
@@ -149,7 +149,7 @@ select set_config('request.jwt.claim.sub', '22222222-2222-4222-8222-222222222222
 set role authenticated;
 do $$ begin
   begin
-    perform public.claim_seat((select id from public.rides where resort_id = 'copper'));
+    perform public.claim_seat((select id from public.rides where resort_id = 'copper'), 'both', true);
     raise exception 'FAIL: claimed cancelled ride';
   exception when raise_exception then
     assert sqlerrm = 'The driver cancelled this ride.', sqlerrm;

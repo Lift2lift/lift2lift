@@ -6,6 +6,7 @@ const MAX_SIDE = 1800; // px; plenty to read a license, keeps uploads small
 
 export const webDevice: DeviceServices = {
   platform: 'web',
+  logo: { uri: '/logo.png' },
 
   /** Stripe's hosted ID check; it sends the person back to /account/driver?verify=done. */
   /** Web has no lock-screen pushes; ride reminders show in the app's Your Rides tab instead. */

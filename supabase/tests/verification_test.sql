@@ -186,7 +186,7 @@ do $$ begin
   assert jsonb_array_length(public.profile_page('66666666-6666-4666-8666-666666666666')->'upcoming') = 1, 'profile page rides';
   -- Can't claim a seat without a finished profile.
   begin
-    perform public.claim_seat((select id from public.rides where driver_id = '66666666-6666-4666-8666-666666666666' and cancelled_at is null));
+    perform public.claim_seat((select id from public.rides where driver_id = '66666666-6666-4666-8666-666666666666' and cancelled_at is null), 'both', true);
     raise exception 'FAIL: rider without profile claimed';
   exception when raise_exception then
     assert sqlerrm like 'Set up your profile first%', sqlerrm;

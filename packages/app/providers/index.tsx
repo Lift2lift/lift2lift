@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AppState } from 'react-native';
 import { lockedLeg, type LegEvent } from '../lib/trips';
 import type { Api, DeviceServices, Session, Trip } from '../lib/types';
+import { IntroSplash } from '../components/IntroSplash';
 
 /* ---------- Backend ---------- */
 
@@ -180,6 +181,8 @@ export function AppProviders({ api, nav, device, children }: { api: Api; nav: Na
             <RidesProvider>{children}</RidesProvider>
           </NavContext.Provider>
         </AuthProvider>
+        {/* Opening screen on launch: logo, LIFT2LIFT, "carpool to ski" for 2 seconds, then it swipes away. */}
+        <IntroSplash logo={device.logo} />
       </DeviceContext.Provider>
     </ApiContext.Provider>
   );
