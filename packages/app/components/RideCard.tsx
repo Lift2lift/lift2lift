@@ -345,10 +345,10 @@ export function RideCard({
 
         {ride.notes ? <Text style={{ color: t.ink, fontSize: 14, lineHeight: 20 }}>{ride.notes}</Text> : null}
 
-        {/* Who's booked: shown to the driver and to riders on this ride (not to everyone browsing). */}
-        {(mine || riding) && ride.riderIds.length ? (
+        {/* Who's in the car: every rider on this ride, for everyone looking at the board. Tap a name for their profile. */}
+        {ride.riderIds.length ? (
           <View style={{ gap: 6 }}>
-            <Text style={{ color: t.muted, fontSize: 13 }}>{mine ? 'Riding with you:' : `In the car with ${firstName}:`}</Text>
+            <Text style={{ color: t.ink, fontSize: 13, fontWeight: '700' }}>{mine ? 'Riding with you:' : `In the car with ${firstName}:`}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {ride.riderIds.map((id, i) => {
                 const person = { id, name: ride.riderNames[i] ?? '', avatarUrl: ride.riderAvatarUrls[i] ?? null, gender: ride.riderGenders[i] ?? null };
@@ -376,7 +376,9 @@ export function RideCard({
               })}
             </View>
           </View>
-        ) : null}
+        ) : (
+          <Text style={{ color: t.muted, fontSize: 13 }}>{mine ? 'No riders yet.' : `No one's riding with ${firstName} yet.`}</Text>
+        )}
 
         <View
           style={{
