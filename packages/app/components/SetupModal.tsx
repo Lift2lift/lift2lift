@@ -49,9 +49,11 @@ export function SetupModal({
           <Button
             title={profileReady ? 'Add insurance card' : 'Set up my profile'}
             onPress={() => {
+              // Drivers see this on the post screen, where onClose goes back. Going back and then
+              // navigating lands on the previous page on web, so swap the post screen out instead.
+              if (role === 'driver') return nav.replace(profileReady ? '/account/driver' : '/profile/setup', { then });
               onClose();
-              if (profileReady) nav.replace('/account/driver', { then: 'post' });
-              else nav.push('/profile/setup', { then });
+              nav.push('/profile/setup', { then });
             }}
           />
           <Button title="Not now" variant="ghost" onPress={onClose} />
