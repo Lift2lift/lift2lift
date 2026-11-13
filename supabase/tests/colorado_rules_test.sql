@@ -88,12 +88,12 @@ declare
 begin
   assert (select gas_cap from public.ride_board where id = v_eldora) = 30, 'board shows the gas cap';
 
-  perform public.claim_seat(v_eldora);
-  perform public.claim_seat(v_vail); -- next day: fine
+  perform public.claim_seat(v_eldora, 'both', true);
+  perform public.claim_seat(v_vail, 'both', true); -- next day: fine
 
   -- Second seat on the same day is rejected.
   begin
-    perform public.claim_seat(v_copper);
+    perform public.claim_seat(v_copper, 'both', true);
     raise exception 'FAIL: two seats same day';
   exception when raise_exception then
     assert sqlerrm like 'You already have a seat that day.%', sqlerrm;
@@ -110,7 +110,7 @@ begin
 
   -- Booking closes 2 hours before departure.
   begin
-    perform public.claim_seat(v_soon);
+    perform public.claim_seat(v_soon, 'both', true);
     raise exception 'FAIL: booked inside 2 hours';
   exception when raise_exception then
     assert sqlerrm like 'Booking closed.%', sqlerrm;
@@ -118,7 +118,7 @@ begin
 
   -- Bail on Eldora, then the Copper ride that day is open to Blair.
   delete from public.ride_seats where ride_id = v_eldora and rider_id = auth.uid();
-  perform public.claim_seat(v_copper);
+  perform public.claim_seat(v_copper, 'both', true);
 end $$;
 reset role;
 
@@ -131,7 +131,7 @@ declare
 begin
   -- Alex is driving that day, so can't take a seat in another car.
   begin
-    perform public.claim_seat(v_copper);
+    perform public.claim_seat(v_copper, 'both', true);
     raise exception 'FAIL: rider while driving same day';
   exception when raise_exception then
     assert sqlerrm like 'You''re driving that day.%', sqlerrm;

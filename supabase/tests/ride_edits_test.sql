@@ -41,7 +41,7 @@ set role authenticated;
 do $$
 declare v_id uuid := (select id from ids where name = 'ride');
 begin
-  perform public.claim_seat(v_id, 'both');
+  perform public.claim_seat(v_id, 'both', true);
   assert public.ride_for_edit(v_id) is null, 'riders can''t open the edit form';
   update public.rides set notes = 'hacked' where id = v_id;
   assert (select notes from public.rides where id = v_id) = '', 'riders can''t edit the ride';

@@ -3,7 +3,7 @@ import { Modal, Platform, Pressable, Text, View } from 'react-native';
 import { clock, driveText, DOW, isoDay, MON } from '../lib/dates';
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID } from '../lib/resorts';
-import { bookingClosed } from '../lib/rules';
+import { bookingClosed, CARPOOL_DISCLAIMER } from '../lib/rules';
 import { legAt, oneWayShare, seatLegs, seatsOpen, TRIP_LABEL, tripLegs } from '../lib/trips';
 import { Avatar } from './Avatar';
 import { PersonChip } from './People';
@@ -68,11 +68,18 @@ export function RideCard({
   const myLegs = riding ? ride.riderLegs[ride.riderIds.indexOf(me!)] ?? 'both' : null;
   const firstName = ride.driverName.split(' ')[0] || 'the driver';
   const friendsRiding = friendIds ? ride.riderIds.filter((id) => friendIds.has(id)).length : 0;
-  // Booking: pick legs (round trips), then confirm one way if it's one way.
-  const [sheet, setSheet] = useState<null | 'legs' | { oneWay: SeatLegs; leg: Leg }>(null);
-  const book = (l: SeatLegs) => {
+  // Booking: pick legs (round trips), confirm one way if it's one way, then acknowledge
+  // Colorado's carpool notice (C.R.S. 43-1-127(1)(c)) before the seat is claimed. Every booking.
+  const [sheet, setSheet] = useState<null | 'legs' | { oneWay: SeatLegs; leg: Leg } | { notice: SeatLegs }>(null);
+  const book = (l: SeatLegs) => setSheet({ notice: l });
+  const acknowledgeAndBook = (l: SeatLegs) => {
     setSheet(null);
-    run(() => api.claimSeat(ride.id, l), `Seat saved. It's in Your Rides, and ${firstName} is in your ride chat.`);
+    run(() => api.claimSeat(ride.id, l, true), `Seat saved. It's in Your Rides, and ${firstName} is in your ride chat.`);
+  };
+  const bookingLine = (l: SeatLegs) => {
+    const what = ride.tripType !== 'round_trip' ? TRIP_LABEL[ride.tripType] : l === 'both' ? 'Round trip' : l === 'to' ? 'Ride up only' : 'Ride down only';
+    const gas = ride.tripType === 'round_trip' && l !== 'both' ? oneWayShare(ride.gasPerRider) : ride.gasPerRider;
+    return `${what} with ${firstName} · ${DOW[d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()} · ${gas > 0 ? `$${gas} gas` : 'free'}`;
   };
   const choose = (l: SeatLegs) => {
     const covered = seatLegs(ride.tripType, l);
@@ -179,6 +186,19 @@ export function RideCard({
                     </Pressable>
                   );
                 })}
+                <Button variant="ghost" title="Cancel" onPress={() => setSheet(null)} />
+              </>
+            ) : sheet && 'notice' in sheet ? (
+              <>
+                <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>BEFORE YOU BOOK</Text>
+                <Text style={{ color: t.ink, fontSize: 24, fontWeight: '900' }} accessibilityRole="header">
+                  Colorado carpool notice
+                </Text>
+                <View style={{ borderLeftWidth: 4, borderLeftColor: t.accent, paddingLeft: 12 }}>
+                  <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22 }}>{CARPOOL_DISCLAIMER}</Text>
+                </View>
+                <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>{bookingLine(sheet.notice)}</Text>
+                <Button title="Acknowledge and book" loading={busy} onPress={() => acknowledgeAndBook(sheet.notice)} />
                 <Button variant="ghost" title="Cancel" onPress={() => setSheet(null)} />
               </>
             ) : sheet ? (

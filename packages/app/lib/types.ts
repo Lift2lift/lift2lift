@@ -264,7 +264,8 @@ export interface Api {
   listRides(): Promise<BoardRide[]>;
   postRide(ride: NewRide): Promise<void>;
   cancelRide(rideId: string): Promise<void>;
-  claimSeat(rideId: string, legs?: SeatLegs): Promise<void>;
+  /** Books a seat. `acknowledgedNotice` must be true: the rider tapped "Acknowledge and book" on the Colorado carpool notice. */
+  claimSeat(rideId: string, legs: SeatLegs, acknowledgedNotice: boolean): Promise<void>;
   leaveSeat(rideId: string): Promise<void>;
   removeRider(rideId: string, riderId: string): Promise<void>;
   rideContact(rideId: string): Promise<string | null>;

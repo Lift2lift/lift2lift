@@ -64,15 +64,15 @@ declare
   v_uma uuid := (select id from public.rides where driver_id = 'd1111111-1111-4111-8111-111111111111');
   v_dev uuid := (select id from public.rides where driver_id = 'd2222222-2222-4222-8222-222222222222');
 begin
-  perform public.claim_seat(v_uma, 'to');
+  perform public.claim_seat(v_uma, 'to', true);
   assert (select seats_taken_to = 1 and seats_taken_from = 0 from public.ride_board where id = v_uma), 'leg counts';
   -- A second seat going up the same day is blocked...
   begin
-    perform public.claim_seat(v_uma, 'from'); -- already has a seat on this ride: no-op
+    perform public.claim_seat(v_uma, 'from', true); -- already has a seat on this ride: no-op
   end;
   assert (select legs from public.ride_seats where ride_id = v_uma and rider_id = auth.uid()) = 'to', 'still up only';
   -- ...but a ride down with someone else works.
-  perform public.claim_seat(v_dev);
+  perform public.claim_seat(v_dev, 'both', true);
   assert (select legs from public.ride_seats where ride_id = v_dev and rider_id = auth.uid()) = 'both', 'one-way seat';
   assert jsonb_array_length(public.my_trips()) = 2, 'Your Rides shows both legs';
   assert (public.my_trips()->0->>'role') = 'passenger', 'role';
@@ -83,10 +83,10 @@ reset role;
 select set_config('request.jwt.claim.sub', 'e2222222-2222-4222-8222-222222222222', false);
 set role authenticated;
 do $$ begin
-  perform public.claim_seat((select id from public.rides where driver_id = 'd1111111-1111-4111-8111-111111111111'), 'both');
+  perform public.claim_seat((select id from public.rides where driver_id = 'd1111111-1111-4111-8111-111111111111'), 'both', true);
   -- Rob can't also book Dev's ride down (overlaps his round trip's way down).
   begin
-    perform public.claim_seat((select id from public.rides where driver_id = 'd2222222-2222-4222-8222-222222222222'));
+    perform public.claim_seat((select id from public.rides where driver_id = 'd2222222-2222-4222-8222-222222222222'), 'both', true);
     raise exception 'FAIL: overlapping legs';
   exception when raise_exception then
     assert sqlerrm like 'You already have a seat that day.%', sqlerrm;
@@ -100,12 +100,12 @@ do $$
 declare v_uma uuid := (select id from public.rides where driver_id = 'd1111111-1111-4111-8111-111111111111');
 begin
   begin
-    perform public.claim_seat(v_uma, 'both'); -- up has Rae + Rob = full
+    perform public.claim_seat(v_uma, 'both', true); -- up has Rae + Rob = full
     raise exception 'FAIL: overbooked up';
   exception when raise_exception then
     assert sqlerrm = 'The ride up is full.', sqlerrm;
   end;
-  perform public.claim_seat(v_uma, 'from'); -- down has only Rob
+  perform public.claim_seat(v_uma, 'from', true); -- down has only Rob
   assert (select seats_taken_to = 2 and seats_taken_from = 2 from public.ride_board where id = v_uma), 'both legs full now';
 
   -- Oz isn't on Dev's ride: can't read or post in its chat.

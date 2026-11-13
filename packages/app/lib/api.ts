@@ -265,8 +265,8 @@ export function createApi(supabase: SupabaseClient): Api {
     async cancelRide(rideId) {
       check(await supabase.from('rides').update({ cancelled_at: new Date().toISOString() }).eq('id', rideId));
     },
-    async claimSeat(rideId, legs = 'both') {
-      check(await supabase.rpc('claim_seat', { p_ride_id: rideId, p_legs: legs }));
+    async claimSeat(rideId, legs, acknowledgedNotice) {
+      check(await supabase.rpc('claim_seat', { p_ride_id: rideId, p_legs: legs, p_notice_ack: acknowledgedNotice }));
     },
     async leaveSeat(rideId) {
       const { data } = await supabase.auth.getSession();

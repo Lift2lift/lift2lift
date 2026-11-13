@@ -33,7 +33,7 @@ select set_config('request.jwt.claim.sub', 'c8888888-8888-4888-8888-888888888882
 do $$
 declare v_ride uuid := (select id from sids where name = 'ride'); v_msg uuid;
 begin
-  perform public.claim_seat(v_ride, 'both');
+  perform public.claim_seat(v_ride, 'both', true);
   insert into public.ride_messages (ride_id, body) values (v_ride, 'See you at Kittredge') returning id into v_msg;
   insert into sids values ('msg', v_msg);
 
@@ -133,13 +133,13 @@ declare v_ride uuid := (select id from sids where name = 'ride');
 begin
   perform public.block_user('c8888888-8888-4888-8888-888888888882');
   begin
-    perform public.claim_seat(v_ride, 'both');
+    perform public.claim_seat(v_ride, 'both', true);
     raise exception 'FAIL: booked a ride with someone she blocked';
   exception when raise_exception then assert sqlerrm like 'This ride isn''t available%', sqlerrm;
   end;
   perform public.unblock_user('c8888888-8888-4888-8888-888888888882');
   assert public.hidden_people() = '{}', 'unblocked';
-  perform public.claim_seat(v_ride, 'both');
+  perform public.claim_seat(v_ride, 'both', true);
 end $$;
 reset role;
 
