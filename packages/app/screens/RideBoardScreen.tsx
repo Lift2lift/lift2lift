@@ -17,6 +17,22 @@ import type { BoardRide, Leg, PendingReview } from '../lib/types';
 import { useForecast } from '../lib/useForecast';
 import { useApi, useAuth, useNav } from '../providers';
 
+/**
+ * The disclaimer Colorado requires carpool apps to show "in a conspicuous manner"
+ * (C.R.S. 43-1-127(1)(c)), word for word, in a box above each mountain's rides.
+ */
+function CarpoolNotice() {
+  const t = useTheme();
+  return (
+    <View
+      style={{ backgroundColor: t.surface, borderWidth: 1, borderColor: t.line, borderLeftWidth: 4, borderLeftColor: t.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 4 }}
+    >
+      <Text style={{ color: t.ink, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>COLORADO CARPOOL NOTICE</Text>
+      <Text style={{ color: t.ink, fontSize: 14, lineHeight: 20 }}>{CARPOOL_DISCLAIMER}</Text>
+    </View>
+  );
+}
+
 export function RideBoardScreen({
   initialResort,
   initialDay,
@@ -215,10 +231,8 @@ export function RideBoardScreen({
             </View>
           ) : null}
 
-          <Text style={{ color: t.muted, fontSize: 12, lineHeight: 17 }}>
-            Carpool apps aren't regulated by the state of Colorado. Drivers might not be background-checked, and vehicles and insurance
-            aren't state-verified. Full notice at the bottom.
-          </Text>
+          {/* C.R.S. 43-1-127(1)(c): the exact disclaimer, shown conspicuously where people pick a ride. */}
+          {resort ? <CarpoolNotice /> : null}
 
           {(resort ? [] : toReview).map((r) => {
             const driver = r.people.find((p) => p.role === 'driver');
@@ -345,14 +359,15 @@ export function RideBoardScreen({
             </View>
           )}
 
-          <View style={{ borderTopWidth: 1, borderTopColor: t.line, paddingTop: 14, marginTop: 6, gap: 6 }}>
-            <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>COLORADO CARPOOL NOTICE</Text>
-            <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>{CARPOOL_DISCLAIMER}</Text>
-            <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
-              Lift2Lift follows Colorado's carpool app rules: gas money is capped at the driver's real cost, up to 6 riders per car, one
-              ride per person per day, and seats are booked at least 2 hours ahead.
-            </Text>
-          </View>
+          {resort ? (
+            <View style={{ borderTopWidth: 1, borderTopColor: t.line, paddingTop: 14, marginTop: 6, gap: 6 }}>
+              <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>COLORADO CARPOOL RULES</Text>
+              <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
+                Lift2Lift follows Colorado's carpool app rules: gas money is capped at the driver's real cost, up to 6 riders per car, one
+                ride per person per day, and seats are booked at least 2 hours ahead.
+              </Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
       <TabBar />

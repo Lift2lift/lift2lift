@@ -79,7 +79,7 @@ Lift2Lift is built to qualify as a **carpooling service internet application** u
 | No more than 6 passengers | `seats_total` is 1–6 |
 | One trip per driver per day | One ride per **person** per day, driving or riding (Mountain Time), with a lock so two requests at once can't both get through |
 | Reservations at least 2 hours ahead | Rides must leave 2+ hours after posting, and seats close 2 hours before departure |
-| Disclaimer displayed prominently | Shown on sign-up, on the post form, and on the ride board (`packages/app/lib/rules.ts`) |
+| Disclaimer displayed conspicuously (§ 1(c)) | The exact statutory wording, shown on sign-up, on the post form, and in a boxed **Colorado carpool notice** above the rides on every mountain's board, where people pick a ride (`packages/app/lib/rules.ts`) |
 | Trips 23+ miles, or to or from a ski area | Every destination is a ski area |
 
 ### Before launch
