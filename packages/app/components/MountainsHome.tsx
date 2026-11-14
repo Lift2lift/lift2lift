@@ -247,7 +247,7 @@ export function MountainsHome({
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Where are you headed?"
+            placeholder="Search mountains"
             placeholderTextColor={t.muted}
             accessibilityLabel="Search mountains"
             autoCorrect={false}
