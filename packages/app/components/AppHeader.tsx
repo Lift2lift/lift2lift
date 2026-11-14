@@ -9,6 +9,7 @@ import { canHost } from '../lib/types';
 const TABS: { route: Route; label: string }[] = [
   { route: '/', label: 'Mountains' },
   { route: '/rides', label: 'Rides' },
+  { route: '/communities', label: 'Communities' },
   { route: '/snow', label: 'Snow' },
 ];
 
@@ -60,7 +61,7 @@ export function AppHeader() {
         {compact ? null : (
         <View style={{ flexDirection: 'row', gap: 4, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 4 }}>
           {TABS.map((tab) => {
-            const active = nav.current === tab.route;
+            const active = nav.current === tab.route || (tab.route === '/communities' && nav.current === '/community');
             return (
               <Pressable
                 key={tab.route}

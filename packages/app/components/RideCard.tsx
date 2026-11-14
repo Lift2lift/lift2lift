@@ -277,6 +277,16 @@ export function RideCard({
               {TRIP_LABEL[ride.tripType]}
             </Text>
           </View>
+          {ride.communityId ? (
+            <View
+              style={{ backgroundColor: t.header, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}
+              accessibilityLabel={`Members only: ${ride.communityName ?? 'community'} ride`}
+            >
+              <Text style={{ color: t.headerInk, fontSize: 12, fontWeight: '800' }}>
+                {ride.communityName ?? 'Community'} · members only
+              </Text>
+            </View>
+          ) : null}
           {friendIds?.has(ride.driverId) ? (
             <View style={{ backgroundColor: t.accent, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
               <Text style={{ color: t.accentInk, fontSize: 12, fontWeight: '800' }}>Your friend is driving</Text>

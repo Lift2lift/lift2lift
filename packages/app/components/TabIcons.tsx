@@ -58,3 +58,31 @@ export function CarIcon({ color, cutout }: IconProps) {
     </View>
   );
 }
+
+/** Communities tab: three people, the middle one in front. */
+export function GroupIcon({ color, cutout }: IconProps) {
+  const person = (left: number, top: number, head: number, body: number, ring: boolean) => (
+    <View key={left} style={{ position: 'absolute', left, top, alignItems: 'center' }}>
+      <View style={{ width: head, height: head, borderRadius: head / 2, backgroundColor: color, borderWidth: ring ? 1.5 : 0, borderColor: cutout }} />
+      <View
+        style={{
+          width: body,
+          height: body * 0.62,
+          marginTop: 1,
+          borderTopLeftRadius: body / 2,
+          borderTopRightRadius: body / 2,
+          backgroundColor: color,
+          borderWidth: ring ? 1.5 : 0,
+          borderColor: cutout,
+        }}
+      />
+    </View>
+  );
+  return (
+    <View style={{ width: 28, height: 20 }}>
+      {person(0, 3, 7, 11, false)}
+      {person(17, 3, 7, 11, false)}
+      {person(6.5, 0, 9.5, 15, true)}
+    </View>
+  );
+}

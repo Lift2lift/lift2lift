@@ -110,3 +110,19 @@ export const TRIP_LABEL: Record<TripType, string> = {
   to_mountain: 'One way up',
   from_mountain: 'One way down',
 };
+
+/** Legs someone already has each day (driving takes the whole day; a seat takes the legs it covers). */
+export function busyLegsByDay(rides: BoardRide[], me: string | undefined) {
+  const m = new Map<string, Set<Leg>>();
+  if (!me) return m;
+  for (const r of rides) {
+    let legs: Leg[] = [];
+    if (r.driverId === me) legs = ['to', 'from'];
+    else if (r.riderIds.includes(me)) legs = seatLegs(r.tripType, r.riderLegs[r.riderIds.indexOf(me)] ?? 'both');
+    if (!legs.length) continue;
+    const set = m.get(r.rideDate) ?? new Set<Leg>();
+    legs.forEach((l) => set.add(l));
+    m.set(r.rideDate, set);
+  }
+  return m;
+}

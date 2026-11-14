@@ -28,6 +28,8 @@ function RootStack() {
         <Stack.Screen name="u" />
         <Stack.Screen name="review" />
         <Stack.Screen name="friends" />
+        <Stack.Screen name="communities" />
+        <Stack.Screen name="community" />
         <Stack.Screen name="rides" options={{ gestureEnabled: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
