@@ -36,6 +36,29 @@ function markShown() {
   }
 }
 
+// Lets other launch pop-ups (the carpool notice) wait until the intro is gone.
+let introDone = false;
+const doneListeners = new Set<() => void>();
+function finishIntro() {
+  if (introDone) return;
+  introDone = true;
+  doneListeners.forEach((l) => l());
+}
+
+/** True once the opening screen has finished (or was skipped because it already showed). */
+export function useIntroDone() {
+  const [done, setDone] = useState(introDone);
+  useEffect(() => {
+    if (introDone) return setDone(true);
+    const l = () => setDone(true);
+    doneListeners.add(l);
+    return () => {
+      doneListeners.delete(l);
+    };
+  }, []);
+  return done;
+}
+
 /**
  * The opening screen: logo, LIFT2LIFT and "carpool to ski". Holds for
  * 2 seconds, then swipes off to the left. Tap to skip. With Reduce Motion on,
@@ -58,11 +81,14 @@ export function IntroSplash({ logo }: { logo?: DeviceServices['logo'] }) {
       duration: reduceMotion.current ? 250 : OUT_MS,
       easing: Easing.in(Easing.cubic),
       useNativeDriver: native,
-    }).start(() => setVisible(false));
+    }).start(() => {
+      setVisible(false);
+      finishIntro();
+    });
   };
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) return finishIntro();
     markShown();
     AccessibilityInfo.isReduceMotionEnabled?.()
       .then((on) => {

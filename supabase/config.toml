@@ -82,6 +82,10 @@ verify_jwt = false
 [functions.send-ride-reminders]
 verify_jwt = false
 
+# Live drive times with traffic for the Mountains tab (Mapbox, MAPBOX_TOKEN).
+[functions.drive-times]
+verify_jwt = true
+
 # Hosted project overrides, applied by `supabase config push`.
 # Without these the hosted Site URL stays at localhost and email links land there.
 [remotes.production]

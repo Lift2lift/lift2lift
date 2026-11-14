@@ -1,6 +1,6 @@
 'use client';
 
-import { AppProviders, AUTH_ROUTES, Loading, PUBLIC_ROUTES, useAuth, withQuery, type Nav, type Route } from '@lift2lift/app';
+import { AppProviders, AUTH_ROUTES, CarpoolNoticeGate, Loading, PUBLIC_ROUTES, useAuth, withQuery, type Nav, type Route } from '@lift2lift/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
@@ -68,6 +68,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <View style={{ flex: 1, minHeight: '100%' as unknown as number }}>
           <AuthGate>{children}</AuthGate>
         </View>
+        <CarpoolNoticeGate />
       </AppProviders>
     </SafeAreaProvider>
   );

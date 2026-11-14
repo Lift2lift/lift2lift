@@ -27,3 +27,4 @@ export { Stars, StarInput, RatingBadge } from './components/Stars';
 export { Avatar, RING } from './components/Avatar';
 export * from './lib/interests';
 export { Loading } from './components/ui';
+export { CarpoolNoticeGate } from './components/CarpoolNotice';

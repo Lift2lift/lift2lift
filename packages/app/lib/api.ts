@@ -563,6 +563,12 @@ export function createApi(supabase: SupabaseClient): Api {
 
     getForecast: fetchForecast,
 
+    async getDriveTimes(lat, lon) {
+      const { data, error } = await supabase.functions.invoke('drive-times', { body: { lat, lon } });
+      if (error) throw new Error("Couldn't get live drive times.");
+      return (data as { minutes: Record<string, number> }).minutes;
+    },
+
     async myTrips() {
       const { data } = check(await supabase.rpc('my_trips'));
       type P = { id: string; name: string; avatar_path: string | null; gender: Gender | null; legs?: SeatLegs };

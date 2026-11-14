@@ -14,6 +14,34 @@ export const webDevice: DeviceServices = {
     return null;
   },
 
+  // localStorage can throw (private windows, blocked site data); treat that as "not saved".
+  async getPref(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+
+  async setPref(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      // not saved; it falls back to the default next visit
+    }
+  },
+
+  getLocation() {
+    return new Promise((resolve) => {
+      if (!('geolocation' in navigator)) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }),
+        () => resolve(null),
+        { maximumAge: 10 * 60 * 1000, timeout: 10000 },
+      );
+    });
+  },
+
   openIdentityCheck(url) {
     window.location.assign(url);
     return new Promise<void>(() => {}); // the page is leaving

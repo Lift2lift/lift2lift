@@ -5,8 +5,9 @@ import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
 import { upcomingLegs } from '../lib/trips';
 import { useAuth, useMyRides, useNav, type Route } from '../providers';
+import { CarIcon, MountainIcon } from './TabIcons';
 
-/** Bottom tab bar for the phone layout: Rides, Snow, Post, Profile. */
+/** Bottom tab bar for the phone layout: Mountains, Rides, Post, Snow, Profile. */
 export function TabBar() {
   const t = useTheme();
   const nav = useNav();
@@ -19,17 +20,17 @@ export function TabBar() {
 
   const initial = ((session?.name || session?.email || '?')[0] || '?').toUpperCase();
   const tabs: { route: Route; label: string; icon: (active: boolean) => ReactNode; match: Route[] }[] = [
-    { route: '/', label: 'Rides', match: ['/'], icon: (a) => <Text style={{ fontSize: 20, color: a ? t.ink : t.muted }}>▲</Text> },
+    // Home base: pick a mountain, then see its rides.
+    { route: '/', label: 'Mountains', match: ['/'], icon: (a) => <MountainIcon color={a ? t.ink : t.muted} cutout={t.surface} /> },
     {
+      // The trips you're driving or riding. Red dot when one leaves within 24 hours.
       route: '/rides',
-      label: 'Your Rides',
+      label: 'Rides',
       match: ['/rides'],
       icon: (a) => (
         <View>
-          <View style={{ width: 24, height: 17, borderRadius: 4, borderWidth: 2, borderColor: a ? t.ink : t.muted, borderStyle: 'solid', justifyContent: 'center' }}>
-            <View style={{ position: 'absolute', left: 7, top: 1, bottom: 1, borderLeftWidth: 1.5, borderColor: a ? t.ink : t.muted, borderStyle: 'dashed' }} />
-          </View>
-          {soon ? <View style={{ position: 'absolute', right: -4, top: -4, width: 10, height: 10, borderRadius: 5, backgroundColor: t.danger, borderWidth: 1.5, borderColor: t.surface }} /> : null}
+          <CarIcon color={a ? t.ink : t.muted} cutout={t.surface} />
+          {soon ? <View style={{ position: 'absolute', right: -5, top: -5, width: 10, height: 10, borderRadius: 5, backgroundColor: t.danger, borderWidth: 1.5, borderColor: t.surface }} /> : null}
         </View>
       ),
     },

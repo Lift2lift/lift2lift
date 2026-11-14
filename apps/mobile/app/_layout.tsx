@@ -1,4 +1,4 @@
-import { AppProviders, Loading, useAuth, useTheme, withQuery, type Nav, type Route } from '@lift2lift/app';
+import { AppProviders, CarpoolNoticeGate, Loading, useAuth, useTheme, withQuery, type Nav, type Route } from '@lift2lift/app';
 import * as Notifications from 'expo-notifications';
 import { router, Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -14,7 +14,8 @@ function RootStack() {
   if (loading) return <Loading label="Loading…" />;
   const signedIn = !!session;
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg }, animation: 'fade' }}>
+    // Quick cross-fade between sections (iOS default is 350ms, which felt sluggish).
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg }, animation: 'fade', animationDuration: 150 }}>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="index" />
         <Stack.Screen name="snow" />
@@ -86,6 +87,7 @@ export default function RootLayout() {
       <AppProviders api={api} nav={nav} device={nativeDevice}>
         <StatusBar style="light" />
         <RootStack />
+        <CarpoolNoticeGate />
       </AppProviders>
     </SafeAreaProvider>
   );
