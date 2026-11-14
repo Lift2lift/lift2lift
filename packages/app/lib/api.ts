@@ -2,7 +2,7 @@ import { TERMS_VERSION } from './legal';
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, ChatMessage, Community, CommunityPage, CommunityRole, JoinCommunityResult, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
+import type { Api, BoardRide, ChatMessage, Community, CommunityPage, CommunityRole, JoinCommunityResult, PopularCommunity, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
 
 type BoardRow = {
   id: string;
@@ -341,7 +341,7 @@ export function createApi(supabase: SupabaseClient): Api {
 
     async myCommunities() {
       const { data } = check(await supabase.rpc('my_communities'));
-      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; member_count: number; upcoming_rides: number };
+      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number };
       return ((data ?? []) as Row[]).map(
         (c): Community => ({
           id: c.id,
@@ -349,8 +349,10 @@ export function createApi(supabase: SupabaseClient): Api {
           description: c.description ?? '',
           code: c.code,
           role: c.role,
+          listed: c.listed !== false,
           memberCount: Number(c.member_count),
           upcomingRides: Number(c.upcoming_rides),
+          pendingRequests: Number(c.pending_requests ?? 0),
         }),
       );
     },
@@ -367,13 +369,15 @@ export function createApi(supabase: SupabaseClient): Api {
     async communityPage(communityId) {
       const { data } = check(await supabase.rpc('community_page', { p_community_id: communityId }));
       type M = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null; role: CommunityRole; joined_at: string };
-      const d = data as { id: string; name: string; description: string; code: string | null; my_role: CommunityRole; member_count: number; members: M[] };
-      const urls = await signAvatars(d.members.map((m) => m.avatar_path));
+      type Q = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null; requested_at: string };
+      const d = data as { id: string; name: string; description: string; code: string | null; listed: boolean; my_role: CommunityRole; member_count: number; members: M[]; requests: Q[] };
+      const urls = await signAvatars([...d.members, ...(d.requests ?? [])].map((m) => m.avatar_path));
       return {
         id: d.id,
         name: d.name,
         description: d.description ?? '',
         code: d.code,
+        listed: d.listed !== false,
         myRole: d.my_role,
         memberCount: Number(d.member_count),
         members: d.members.map((m) => ({
@@ -383,6 +387,13 @@ export function createApi(supabase: SupabaseClient): Api {
           gender: m.gender,
           role: m.role,
           joinedAt: m.joined_at,
+        })),
+        requests: (d.requests ?? []).map((q) => ({
+          id: q.id,
+          name: q.full_name,
+          avatarUrl: q.avatar_path ? urls[q.avatar_path] ?? null : null,
+          gender: q.gender,
+          requestedAt: q.requested_at,
         })),
       } satisfies CommunityPage;
     },
@@ -401,6 +412,31 @@ export function createApi(supabase: SupabaseClient): Api {
     async resetCommunityCode(communityId) {
       const { data } = check(await supabase.rpc('reset_community_code', { p_community_id: communityId }));
       return String(data);
+    },
+    async popularCommunities() {
+      const { data } = check(await supabase.rpc('popular_communities', { p_limit: 20 }));
+      type Row = { id: string; name: string; description: string; member_count: number; upcoming_rides: number; my_status: PopularCommunity['myStatus'] };
+      return ((data ?? []) as Row[]).map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description ?? '',
+        memberCount: Number(c.member_count),
+        upcomingRides: Number(c.upcoming_rides),
+        myStatus: c.my_status,
+      }));
+    },
+    async requestToJoin(communityId) {
+      const { data } = check(await supabase.rpc('request_to_join', { p_community_id: communityId }));
+      return data === 'member' ? 'member' : 'requested';
+    },
+    async cancelJoinRequest(communityId) {
+      check(await supabase.rpc('cancel_join_request', { p_community_id: communityId }));
+    },
+    async respondJoinRequest(communityId, userId, approve) {
+      check(await supabase.rpc('respond_join_request', { p_community_id: communityId, p_user_id: userId, p_approve: approve }));
+    },
+    async setCommunityListed(communityId, listed) {
+      check(await supabase.rpc('set_community_listed', { p_community_id: communityId, p_listed: listed }));
     },
 
     async myFriends() {

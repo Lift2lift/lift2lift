@@ -250,12 +250,28 @@ export type Community = {
   id: string;
   name: string;
   description: string;
-  /** The 9-character code members share to bring people in. */
+  /** The 9-character code. Admins only (null for members): admins send it out as an invite. */
   code: string | null;
   role: CommunityRole;
+  /** Shown in Popular communities. */
+  listed: boolean;
   memberCount: number;
   upcomingRides: number;
+  /** Requests to join waiting for an admin (0 for members). */
+  pendingRequests: number;
 };
+
+/** A community in Popular communities, with where you stand. */
+export type PopularCommunity = {
+  id: string;
+  name: string;
+  description: string;
+  memberCount: number;
+  upcomingRides: number;
+  myStatus: 'member' | 'requested' | 'none';
+};
+
+export type JoinRequest = Person & { requestedAt: string };
 
 export type CommunityMember = Person & { role: CommunityRole; joinedAt: string };
 
@@ -263,10 +279,14 @@ export type CommunityPage = {
   id: string;
   name: string;
   description: string;
+  /** Admins only. */
   code: string | null;
+  listed: boolean;
   myRole: CommunityRole;
   memberCount: number;
   members: CommunityMember[];
+  /** Waiting requests to join (admins only; empty for members). */
+  requests: JoinRequest[];
 };
 
 /**
@@ -361,6 +381,14 @@ export interface Api {
   setCommunityRole(communityId: string, userId: string, role: CommunityRole): Promise<void>;
   /** Makes a new code; the old one stops working. Returns the new code. */
   resetCommunityCode(communityId: string): Promise<string>;
+  /** Most members first, with your status in each. */
+  popularCommunities(): Promise<PopularCommunity[]>;
+  /** Ask to join. Returns 'member' if you're already in. */
+  requestToJoin(communityId: string): Promise<'requested' | 'member'>;
+  cancelJoinRequest(communityId: string): Promise<void>;
+  /** Admins only. */
+  respondJoinRequest(communityId: string, userId: string, approve: boolean): Promise<void>;
+  setCommunityListed(communityId: string, listed: boolean): Promise<void>;
   /** Live drive time in minutes, with current traffic, from a spot to each mountain (keyed by resort id). */
   getDriveTimes(lat: number, lon: number): Promise<Record<string, number>>;
 

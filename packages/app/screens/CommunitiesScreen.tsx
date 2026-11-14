@@ -4,13 +4,13 @@ import { AppHeader } from '../components/AppHeader';
 import { Button, Card, Field, FormScreen, Label, Loading, Muted, Notice } from '../components/ui';
 import { cleanCode, COMMUNITY_CODE_LENGTH, formatCode } from '../lib/communities';
 import { useTheme } from '../lib/theme';
-import type { Community } from '../lib/types';
+import type { Community, PopularCommunity } from '../lib/types';
 import { useApi, useNav } from '../providers';
 
 /**
- * The Communities tab: enter a club's 9-character code to join it, or, for a
- * brand-new code, name the community and become its admin. Below, the
- * communities you're in.
+ * The Communities tab: enter the code from a club's invite to join it (or, for
+ * a brand-new code, name the community and become its admin), the
+ * communities you're in, and Popular communities you can ask to join.
  */
 export function CommunitiesScreen() {
   const t = useTheme();
@@ -37,6 +37,43 @@ export function CommunitiesScreen() {
       .catch((e: Error) => setLoadError(e.message));
   }, [api]);
   useEffect(load, [load]);
+
+  // Popular communities, with Request / Requested / Joined.
+  const [popular, setPopular] = useState<PopularCommunity[] | null>(null);
+  const loadPopular = useCallback(() => {
+    api.popularCommunities().then(setPopular).catch(() => setPopular([]));
+  }, [api]);
+  useEffect(loadPopular, [loadPopular]);
+  const [asking, setAsking] = useState<string | null>(null);
+  const [cancelFor, setCancelFor] = useState<string | null>(null);
+  const [note, setNote] = useState<{ id: string; text: string; kind: 'success' | 'error' } | null>(null);
+  async function request(c: PopularCommunity) {
+    setAsking(c.id);
+    setNote(null);
+    try {
+      const r = await api.requestToJoin(c.id);
+      setPopular((list) => (list ?? []).map((x) => (x.id === c.id ? { ...x, myStatus: r } : x)));
+      setNote({ id: c.id, text: r === 'member' ? "You're already in." : `Request sent. An admin of ${c.name} will review it.`, kind: 'success' });
+      if (r === 'member') load();
+    } catch (e) {
+      setNote({ id: c.id, text: (e as Error).message, kind: 'error' });
+    } finally {
+      setAsking(null);
+    }
+  }
+  async function cancelRequest(c: PopularCommunity) {
+    setAsking(c.id);
+    setNote(null);
+    try {
+      await api.cancelJoinRequest(c.id);
+      setPopular((list) => (list ?? []).map((x) => (x.id === c.id ? { ...x, myStatus: 'none' } : x)));
+      setCancelFor(null);
+    } catch (e) {
+      setNote({ id: c.id, text: (e as Error).message, kind: 'error' });
+    } finally {
+      setAsking(null);
+    }
+  }
 
   const clean = cleanCode(code);
   const complete = clean.length === COMMUNITY_CODE_LENGTH;
@@ -90,7 +127,7 @@ export function CommunitiesScreen() {
       <View style={{ gap: 6 }}>
         <Text style={{ color: t.ink, fontSize: 26, fontWeight: '900', textTransform: 'uppercase' }}>Communities</Text>
         <Text style={{ color: t.muted, fontSize: 15, lineHeight: 21 }}>
-          Your club's own rides, just for members. Get the code from your club.
+          Your club's own rides, just for members. Got an invite? Enter its code. Or ask to join a popular community below.
         </Text>
       </View>
 
@@ -101,7 +138,7 @@ export function CommunitiesScreen() {
             <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>NEW COMMUNITY · {formatCode(setupCode)}</Text>
             <Text style={{ color: t.ink, fontSize: 22, fontWeight: '900' }}>Set up your community</Text>
             <Text style={{ color: t.muted, fontSize: 14, lineHeight: 20 }}>
-              Nobody has used this code yet. Name your community and you'll be its admin. Share the same code with your members so they can join.
+              Nobody has used this code yet. Name your community and you'll be its admin. Then send the code to your members as an invite so they can join.
             </Text>
           </View>
           <Field label="Name" value={name} onChangeText={setName} placeholder="CU Freeride" maxLength={40} autoFocus />
@@ -174,15 +211,14 @@ export function CommunitiesScreen() {
         </Card>
       )}
 
+      {loadError ? (
+        <Notice kind="error">{loadError}</Notice>
+      ) : !mine ? (
+        <Loading label="Loading your communities…" />
+      ) : mine.length === 0 ? null : (
       <View style={{ gap: 8 }}>
         <Label>Your communities</Label>
-        {loadError ? (
-          <Notice kind="error">{loadError}</Notice>
-        ) : !mine ? (
-          <Loading label="Loading your communities…" />
-        ) : mine.length === 0 ? (
-          <Muted>You're not in any communities yet. When your club gives you a code, enter it above.</Muted>
-        ) : (
+        {(
           mine.map((c) => (
             <Pressable
               key={c.id}
@@ -202,9 +238,70 @@ export function CommunitiesScreen() {
                     {c.memberCount} {c.memberCount === 1 ? 'member' : 'members'} · {c.upcomingRides} upcoming {c.upcomingRides === 1 ? 'ride' : 'rides'}
                   </Text>
                 </View>
+                {c.pendingRequests > 0 ? (
+                  <View style={{ backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 }}>
+                    <Text style={{ color: t.accentInk, fontSize: 12, fontWeight: '800' }}>
+                      {c.pendingRequests} {c.pendingRequests === 1 ? 'request' : 'requests'}
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={{ color: t.muted, fontSize: 20 }}>›</Text>
               </Card>
             </Pressable>
+          ))
+        )}
+      </View>
+      )}
+
+      {/* Popular communities: ask to join, like a group request. */}
+      <View style={{ gap: 8 }}>
+        <Label>Popular communities</Label>
+        {!popular ? (
+          <Loading label="Loading popular communities…" />
+        ) : popular.length === 0 ? (
+          <Muted>No communities to show yet. Clubs appear here once they're set up.</Muted>
+        ) : (
+          popular.map((c) => (
+            <Card key={c.id} style={{ padding: 14, gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Pressable
+                  disabled={c.myStatus !== 'member'}
+                  onPress={() => nav.push('/community', { id: c.id })}
+                  accessibilityRole={c.myStatus === 'member' ? 'button' : undefined}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}
+                >
+                  <CommunityBadge name={c.name} />
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text numberOfLines={1} style={{ color: t.ink, fontSize: 17, fontWeight: '800' }}>
+                      {c.name}
+                    </Text>
+                    <Text style={{ color: t.muted, fontSize: 13 }}>
+                      {c.memberCount} {c.memberCount === 1 ? 'member' : 'members'} · {c.upcomingRides} upcoming {c.upcomingRides === 1 ? 'ride' : 'rides'}
+                    </Text>
+                  </View>
+                </Pressable>
+                {c.myStatus === 'member' ? (
+                  <Button small variant="ghost" title="Joined ✓" onPress={() => nav.push('/community', { id: c.id })} />
+                ) : c.myStatus === 'requested' ? (
+                  <Button small variant="ghost" title="Requested" onPress={() => setCancelFor(cancelFor === c.id ? null : c.id)} />
+                ) : (
+                  <Button small title="Request" loading={asking === c.id} onPress={() => request(c)} />
+                )}
+              </View>
+              {c.description ? (
+                <Text numberOfLines={2} style={{ color: t.ink, fontSize: 14, lineHeight: 20 }}>
+                  {c.description}
+                </Text>
+              ) : null}
+              {cancelFor === c.id && c.myStatus === 'requested' ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Text style={{ color: t.muted, fontSize: 13, flex: 1, minWidth: 140 }}>Waiting for an admin to approve.</Text>
+                  <Button small variant="ghost" title="Keep" onPress={() => setCancelFor(null)} />
+                  <Button small variant="danger" title="Cancel request" loading={asking === c.id} onPress={() => cancelRequest(c)} />
+                </View>
+              ) : null}
+              {note?.id === c.id ? <Notice kind={note.kind}>{note.text}</Notice> : null}
+            </Card>
           ))
         )}
       </View>

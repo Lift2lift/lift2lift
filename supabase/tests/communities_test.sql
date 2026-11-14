@@ -49,7 +49,7 @@ begin
   exception when raise_exception then
     assert sqlerrm = 'Community codes are 9 characters.', sqlerrm;
   end;
-  assert (select code from public.communities where id = (select id from cm where name = 'club')) = 'TESTCLUB2', 'members see the code';
+  assert (public.my_communities()->0->>'code') = 'TESTCLUB2', 'the admin sees the code';
 end $$;
 
 -- Ben joins as a member; Cal (a driver) joins too.
@@ -200,7 +200,7 @@ begin
   end;
   v_code := public.reset_community_code(v_c);
   assert v_code ~ '^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{9}$', 'new code looks right: ' || v_code;
-  assert (select code from public.communities where id = v_c) = v_code, 'members see the new code';
+  assert (public.community_page(v_c)->>'code') = v_code, 'the admin sees the new code';
   update cm set id = null where name = 'club'; -- keep the club id below via the row
   insert into cm values ('newcode:' || v_code, v_c);
 end $$;

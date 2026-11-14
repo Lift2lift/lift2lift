@@ -15,8 +15,9 @@ import { CommunityBadge } from './CommunitiesScreen';
 
 /**
  * One community: its upcoming rides (members only), a button to post a ride
- * to it, its code to share, and its members. Admins can rename it, make a new
- * code, make other admins and remove people.
+ * to it, and its members. Admins also see the invite code, requests to join,
+ * and tools to rename it, make a new code, list or hide it in Popular, make
+ * other admins and remove people.
  */
 export function CommunityScreen({ communityId, welcome }: { communityId?: string; welcome?: string }) {
   const t = useTheme();
@@ -30,7 +31,7 @@ export function CommunityScreen({ communityId, welcome }: { communityId?: string
   const [rides, setRides] = useState<BoardRide[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; kind: 'success' | 'error' } | null>(
-    welcome === 'admin' ? { text: "You're the admin. Share the code below with your members so they can join.", kind: 'success' } : welcome ? { text: "You're in! Rides posted here show up below and on the mountain boards.", kind: 'success' } : null,
+    welcome === 'admin' ? { text: "You're the admin. Send the invite below to your members so they can join.", kind: 'success' } : welcome ? { text: "You're in! Rides posted here show up below and on the mountain boards.", kind: 'success' } : null,
   );
 
   const load = useCallback(async () => {
@@ -127,30 +128,85 @@ export function CommunityScreen({ communityId, welcome }: { communityId?: string
 
       {message ? <Notice kind={message.kind}>{message.text}</Notice> : null}
 
-      {/* The code, to bring people in */}
-      {page.code ? (
+      {/* The invite code: admins only. */}
+      {admin && page.code ? (
         <Card style={{ padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <View style={{ flex: 1, minWidth: 160, gap: 2 }}>
-            <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>COMMUNITY CODE</Text>
+            <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>INVITE CODE · ONLY ADMINS SEE THIS</Text>
             <Text selectable style={{ color: t.ink, fontSize: 24, fontWeight: '900', letterSpacing: 3 }}>
               {formatCode(page.code)}
             </Text>
-            <Text style={{ color: t.muted, fontSize: 13 }}>Anyone with this code can join. Share it only with your club.</Text>
+            <Text style={{ color: t.muted, fontSize: 13 }}>Send it to people you want in. Anyone with the code can join.</Text>
           </View>
           <Button
             small
             variant="ghost"
-            title="Share code"
+            title="Send invite"
             onPress={async () => {
               const r = await shareOrCopy(`Join ${page.name} on Lift2Lift: open the Communities tab and enter ${formatCode(page.code!)}`);
-              if (r === 'copied') setMessage({ text: 'Copied the invite with the code.', kind: 'success' });
+              if (r === 'copied') setMessage({ text: 'Copied the invite. Paste it into your club chat or a text.', kind: 'success' });
               else if (r === 'failed') setMessage({ text: `Couldn't share. The code is ${formatCode(page.code!)}.`, kind: 'error' });
             }}
           />
         </Card>
       ) : null}
 
+      {/* Requests to join: admins approve or decline. */}
+      {admin && page.requests.length ? (
+        <View style={{ gap: 8 }}>
+          <Label>{`Requests to join · ${page.requests.length}`}</Label>
+          <Card highlight style={{ padding: 0 }}>
+            {page.requests.map((q, i) => (
+              <View
+                key={q.id}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: t.line }}
+              >
+                <Pressable
+                  onPress={() => nav.push('/u', { id: q.id })}
+                  accessibilityRole="link"
+                  accessibilityLabel={`${q.name || 'Someone'} asked to join. Open profile`}
+                  style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 150, opacity: pressed ? 0.7 : 1 })}
+                >
+                  <Avatar uri={q.avatarUrl} name={q.name} gender={q.gender} size={40} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={{ color: t.ink, fontSize: 15, fontWeight: '700' }}>
+                      {q.name || 'Lift2Lift member'}
+                    </Text>
+                    <Text style={{ color: t.muted, fontSize: 12 }}>Asked {askedAgo(q.requestedAt)} · tap to see their profile</Text>
+                  </View>
+                </Pressable>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <Button
+                    small
+                    variant="ghost"
+                    title="Decline"
+                    onPress={() =>
+                      run(async () => {
+                        await api.respondJoinRequest(page.id, q.id, false);
+                        await load();
+                      }, `Declined ${q.name.split(' ')[0]}'s request.`)
+                    }
+                  />
+                  <Button
+                    small
+                    title="Approve"
+                    loading={busy}
+                    onPress={() =>
+                      run(async () => {
+                        await api.respondJoinRequest(page.id, q.id, true);
+                        await load();
+                      }, `${q.name.split(' ')[0]} is in.`)
+                    }
+                  />
+                </View>
+              </View>
+            ))}
+          </Card>
+        </View>
+      ) : null}
+
       <Button title={`+ Post a ride to ${page.name}`} onPress={() => nav.push('/post', { community: page.id })} />
+
 
       {/* Rides */}
       <View style={{ gap: 10 }}>
@@ -277,14 +333,32 @@ export function CommunityScreen({ communityId, welcome }: { communityId?: string
                     run(async () => {
                       const c = await api.resetCommunityCode(page.id);
                       await load();
-                      setMessage({ text: `New code: ${formatCode(c)}. Share it with members who still need to join.`, kind: 'success' });
+                      setMessage({ text: `New code: ${formatCode(c)}. Send it to anyone who still needs to join.`, kind: 'success' });
                     })
                   }
                 />
               </View>
             </View>
           ) : (
+            <View style={{ gap: 8 }}>
+            <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
+              {page.listed
+                ? 'Listed in Popular communities: anyone on Lift2Lift can see its name and ask to join. You approve each request.'
+                : 'Hidden from Popular communities: people can only join with your invite code.'}
+            </Text>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              <Button
+                small
+                variant="ghost"
+                title={page.listed ? 'Hide from Popular' : 'Show in Popular'}
+                loading={busy}
+                onPress={() =>
+                  run(async () => {
+                    await api.setCommunityListed(page.id, !page.listed);
+                    await load();
+                  }, page.listed ? 'Hidden from Popular communities.' : 'Listed in Popular communities.')
+                }
+              />
               <Button
                 small
                 variant="ghost"
@@ -296,6 +370,7 @@ export function CommunityScreen({ communityId, welcome }: { communityId?: string
                 }}
               />
               <Button small variant="ghost" title="Make a new code" onPress={() => setConfirm('code')} />
+            </View>
             </View>
           )}
         </View>
@@ -333,6 +408,17 @@ export function CommunityScreen({ communityId, welcome }: { communityId?: string
       )}
     </FormScreen>
   );
+}
+
+/** "just now", "3 hours ago", "2 days ago". */
+function askedAgo(iso: string) {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
 }
 
 function BackLink() {
