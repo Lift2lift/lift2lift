@@ -214,6 +214,11 @@ export interface DeviceServices {
   registerForPush(): Promise<{ token: string; platform: 'ios' | 'android' | 'web' } | null>;
   /** The app icon for the opening screen: require('../assets/icon.png') on iOS, { uri: '/logo.png' } on the web. */
   logo?: number | { uri: string };
+  /** Small values saved on this device (localStorage on web, AsyncStorage on iOS). */
+  getPref(key: string): Promise<string | null>;
+  setPref(key: string, value: string): Promise<void>;
+  /** Asks for location (while using the app) and returns where the person is, or null if they say no or it fails. */
+  getLocation(): Promise<{ lat: number; lon: number } | null>;
 }
 
 export type NewRide = {
@@ -302,6 +307,8 @@ export interface Api {
   startIdentityCheck(platform: DeviceServices['platform']): Promise<{ url?: string; status: 'pending' | 'processing' | 'verified' }>;
 
   getForecast(): Promise<Forecast>;
+  /** Live drive time in minutes, with current traffic, from a spot to each mountain (keyed by resort id). */
+  getDriveTimes(lat: number, lon: number): Promise<Record<string, number>>;
 
   /** Your Rides: trips I'm driving or riding, upcoming and in progress. */
   myTrips(): Promise<Trip[]>;

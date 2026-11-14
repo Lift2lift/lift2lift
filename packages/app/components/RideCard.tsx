@@ -74,7 +74,7 @@ export function RideCard({
   const book = (l: SeatLegs) => setSheet({ notice: l });
   const acknowledgeAndBook = (l: SeatLegs) => {
     setSheet(null);
-    run(() => api.claimSeat(ride.id, l, true), `Seat saved. It's in Your Rides, and ${firstName} is in your ride chat.`);
+    run(() => api.claimSeat(ride.id, l, true), `Seat saved. It's in your Rides tab, and ${firstName} is in your ride chat.`);
   };
   const bookingLine = (l: SeatLegs) => {
     const what = ride.tripType !== 'round_trip' ? TRIP_LABEL[ride.tripType] : l === 'both' ? 'Round trip' : l === 'to' ? 'Ride up only' : 'Ride down only';

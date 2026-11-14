@@ -29,6 +29,12 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lift2Lift uses your location to show live drive times to each mountain, with traffic."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "defaultChannel": "rides"

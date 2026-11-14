@@ -200,7 +200,7 @@ export function PostRideScreen({ initialResort, editRideId }: { initialResort?: 
       {editError ? (
         <>
           <Notice kind="error">{editError}</Notice>
-          <Button variant="ghost" title="Back to Your Rides" onPress={() => nav.replace('/rides')} />
+          <Button variant="ghost" title="Back to Rides" onPress={() => nav.replace('/rides')} />
         </>
       ) : editing && !original ? (
         <Loading label="Loading your ride…" />

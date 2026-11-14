@@ -7,8 +7,8 @@ import { useTheme } from '../lib/theme';
 import { canHost } from '../lib/types';
 
 const TABS: { route: Route; label: string }[] = [
-  { route: '/', label: 'Rides' },
-  { route: '/rides', label: 'Your Rides' },
+  { route: '/', label: 'Mountains' },
+  { route: '/rides', label: 'Rides' },
   { route: '/snow', label: 'Snow' },
 ];
 

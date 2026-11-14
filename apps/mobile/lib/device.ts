@@ -1,8 +1,10 @@
 import type { DeviceServices } from '@lift2lift/app';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'base64-arraybuffer';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as WebBrowser from 'expo-web-browser';
 import { ActionSheetIOS, Alert, Platform } from 'react-native';
@@ -32,6 +34,22 @@ Notifications.setNotificationHandler({
 export const nativeDevice: DeviceServices = {
   platform: 'ios',
   logo: require('../assets/icon.png'),
+
+  getPref: (key) => AsyncStorage.getItem(key),
+  setPref: (key, value) => AsyncStorage.setItem(key, value),
+
+  /** Location while the app is open, for live drive times. Coarse accuracy is plenty. */
+  async getLocation() {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return null;
+      const last = await Location.getLastKnownPositionAsync({ maxAge: 10 * 60 * 1000 });
+      const p = last ?? (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }));
+      return { lat: p.coords.latitude, lon: p.coords.longitude };
+    } catch {
+      return null;
+    }
+  },
 
   /**
    * Asks to send notifications and returns this phone's Expo push token. The

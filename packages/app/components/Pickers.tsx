@@ -146,6 +146,7 @@ export function DayPicker({
   disabledNote,
   label,
   fill,
+  trigger,
 }: {
   value: string;
   onChange: (day: string) => void;
@@ -159,6 +160,8 @@ export function DayPicker({
   disabledNote?: string;
   label?: string;
   fill?: boolean;
+  /** Custom button in place of the dropdown, e.g. a calendar icon. Call `open` to show the calendar. */
+  trigger?: (open: () => void, shown: string) => ReactNode;
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
@@ -194,7 +197,13 @@ export function DayPicker({
 
   return (
     <>
-      <DropdownButton label={label} value={shown} onPress={() => { setMonth(new Date(start.getFullYear(), start.getMonth(), 1)); setOpen(true); }} accessibilityLabel={`${label ?? 'Day'}: ${shown}. Change day`} fill={fill} />
+      {(() => {
+        const show = () => {
+          setMonth(new Date(start.getFullYear(), start.getMonth(), 1));
+          setOpen(true);
+        };
+        return trigger ? trigger(show, shown) : <DropdownButton label={label} value={shown} onPress={show} accessibilityLabel={`${label ?? 'Day'}: ${shown}. Change day`} fill={fill} />;
+      })()}
       <PickerSheet visible={open} title={label ?? 'Pick a day'} onClose={() => setOpen(false)}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
           {quick.map((q) => {
@@ -313,6 +322,8 @@ export function OptionPicker<T extends string>({
   options,
   onChange,
   fill,
+  trigger,
+  footer,
 }: {
   label: string;
   title: string;
@@ -320,13 +331,17 @@ export function OptionPicker<T extends string>({
   options: { id: T; label: string; hint?: string }[];
   onChange: (v: T) => void;
   fill?: boolean;
+  /** Custom button in place of the dropdown, e.g. an icon. Call `open` to show the choices. */
+  trigger?: (open: () => void, current: { id: T; label: string }) => ReactNode;
+  /** Small print under the choices. */
+  footer?: string;
 }) {
   const t = useTheme();
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.id === value) ?? options[0];
   return (
     <>
-      <DropdownButton label={label} value={current.label} onPress={() => setOpen(true)} fill={fill} />
+      {trigger ? trigger(() => setOpen(true), current) : <DropdownButton label={label} value={current.label} onPress={() => setOpen(true)} fill={fill} />}
       <PickerSheet visible={open} title={title} onClose={() => setOpen(false)}>
         <View style={{ gap: 4 }} accessibilityRole="radiogroup">
           {options.map((o) => {
@@ -361,6 +376,7 @@ export function OptionPicker<T extends string>({
             );
           })}
         </View>
+        {footer ? <Text style={{ color: t.muted, fontSize: 12, lineHeight: 17 }}>{footer}</Text> : null}
       </PickerSheet>
     </>
   );

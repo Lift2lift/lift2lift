@@ -4,7 +4,8 @@ import { AppHeader } from '../components/AppHeader';
 import { TabBar } from '../components/TabBar';
 import { RideCard } from '../components/RideCard';
 import { SetupModal } from '../components/SetupModal';
-import { MountainPicker, MountainSelectButton, mountainStats, PopularMountains } from '../components/MountainPicker';
+import { MountainPicker, mountainStats } from '../components/MountainPicker';
+import { MountainsHome } from '../components/MountainsHome';
 import { DayPicker, OptionPicker } from '../components/Pickers';
 import { Button, Chip, Loading, Notice } from '../components/ui';
 import { addDays, dayLabel, driveText, isoDay, longDay } from '../lib/dates';
@@ -130,8 +131,6 @@ export function RideBoardScreen({
 
   // Home: every mountain's upcoming rides, for the picker and the quick tiles.
   const stats = useMemo(() => mountainStats(all), [rides]);
-  const activeMountains = stats.filter((x) => x.rides > 0).length;
-  const upcoming = stats.reduce((n, x) => n + x.rides, 0);
   const myRides = all
     .filter((r) => isMine(r) && new Date(r.returnAt ?? r.departAt).getTime() > Date.now())
     .sort((a, b) => a.departAt.localeCompare(b.departAt));
@@ -144,7 +143,7 @@ export function RideBoardScreen({
   }, [forecast, today]);
 
   // From the home screen a mountain opens on top (Back returns here); "Change" swaps it in place.
-  const openResort = (id: string) => (resort ? nav.replace('/', { resort: id, ...(day !== 'all' ? { day } : {}) }) : nav.push('/', { resort: id }));
+  const openResort = (id: string) => (resort ? nav.replace : nav.push)('/', { resort: id, ...(day !== 'all' ? { day } : {}) });
 
   return (
     <View style={{ flex: 1, backgroundColor: t.bg }}>
@@ -190,12 +189,7 @@ export function RideBoardScreen({
                 {PASS_NOTES[resort] ? <Text style={{ color: t.muted, fontWeight: '400' }}>{`. ${PASS_NOTES[resort]}`}</Text> : null}
               </Text>
             </View>
-          ) : (
-            <View style={{ gap: 12 }}>
-              <Text style={{ color: t.ink, fontSize: 26, fontWeight: '900', textTransform: 'uppercase' }}>Where are you headed?</Text>
-              <MountainSelectButton rides={upcoming} mountains={activeMountains} onPress={() => setPickerOpen(true)} />
-            </View>
-          )}
+          ) : null}
           <MountainPicker
             visible={pickerOpen}
             onClose={() => setPickerOpen(false)}
@@ -215,28 +209,8 @@ export function RideBoardScreen({
           ) : null}
 
 
-          {(resort ? [] : toReview).map((r) => {
-            const driver = r.people.find((p) => p.role === 'driver');
-            const others = r.people.filter((p) => p.role === 'passenger').length;
-            const who = [driver ? driver.name.split(' ')[0] : null, others ? `${others} passenger${others > 1 ? 's' : ''}` : null].filter(Boolean).join(' and ');
-            return (
-              <Pressable
-                key={r.rideId}
-                onPress={() => nav.push('/review', { ride: r.rideId })}
-                accessibilityRole="button"
-                style={({ pressed }) => ({ backgroundColor: t.surface, borderColor: t.accent, borderWidth: 2, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: pressed ? 0.85 : 1 })}
-              >
-                <Text style={{ color: t.accent, fontSize: 26 }}>★</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>How was {RESORT_BY_ID[r.resortId]?.name ?? 'your ride'}?</Text>
-                  <Text style={{ color: t.muted, fontSize: 13 }}>Rate {who}. Takes 30 seconds.</Text>
-                </View>
-                <Text style={{ color: t.muted, fontSize: 20 }}>›</Text>
-              </Pressable>
-            );
-          })}
-
-          {message ? <Notice kind={message.kind}>{message.text}</Notice> : null}
+          {/* On the home screen the message sits under the search bar instead (inside MountainsHome). */}
+          {resort && message ? <Notice kind={message.kind}>{message.text}</Notice> : null}
 
           {loadError ? (
             <View style={{ gap: 10 }}>
@@ -246,19 +220,50 @@ export function RideBoardScreen({
           ) : rides === null ? (
             <Loading label="Loading the ride board…" />
           ) : !resort ? (
-            /* ---------------- Home: pick a mountain ---------------- */
+            /* ---------------- Home: search, day, pass and the mountain rows ---------------- */
             <View style={{ gap: 18 }}>
-              {!all.length ? (
-                <View style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: t.line, borderRadius: 16, padding: 28, alignItems: 'center', gap: 10 }}>
-                  <Text style={{ color: t.ink, fontSize: 22, fontWeight: '900', textTransform: 'uppercase' }}>The board is empty</Text>
-                  <Text style={{ color: t.muted, textAlign: 'center', maxWidth: 420, lineHeight: 21 }}>
-                    No one has posted a ride yet. If you're driving up, post your open seats and riders will reach out.
-                  </Text>
-                  <Button title="+ Post a ride" onPress={() => nav.push('/post')} />
-                </View>
-              ) : (
-                <PopularMountains stats={stats} onSelect={openResort} />
-              )}
+              <MountainsHome
+                rides={all}
+                day={day}
+                setDay={setDay}
+                minDay={today}
+                maxDay={lastDay}
+                dayCounts={dayCounts}
+                forecast={forecast}
+                onOpen={openResort}
+                initialPass={isPassFilter(initialPass) ? initialPass : undefined}
+              >
+                {toReview.map((r) => {
+                  const driver = r.people.find((p) => p.role === 'driver');
+                  const others = r.people.filter((p) => p.role === 'passenger').length;
+                  const who = [driver ? driver.name.split(' ')[0] : null, others ? `${others} passenger${others > 1 ? 's' : ''}` : null].filter(Boolean).join(' and ');
+                  return (
+                    <Pressable
+                      key={r.rideId}
+                      onPress={() => nav.push('/review', { ride: r.rideId })}
+                      accessibilityRole="button"
+                      style={({ pressed }) => ({ backgroundColor: t.surface, borderColor: t.accent, borderWidth: 2, borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: pressed ? 0.85 : 1 })}
+                    >
+                      <Text style={{ color: t.accent, fontSize: 26 }}>★</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>How was {RESORT_BY_ID[r.resortId]?.name ?? 'your ride'}?</Text>
+                        <Text style={{ color: t.muted, fontSize: 13 }}>Rate {who}. Takes 30 seconds.</Text>
+                      </View>
+                      <Text style={{ color: t.muted, fontSize: 20 }}>›</Text>
+                    </Pressable>
+                  );
+                })}
+                {message ? <Notice kind={message.kind}>{message.text}</Notice> : null}
+                {!all.length ? (
+                  <View style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: t.line, borderRadius: 16, padding: 20, alignItems: 'center', gap: 8 }}>
+                    <Text style={{ color: t.ink, fontSize: 18, fontWeight: '900', textTransform: 'uppercase' }}>The board is empty</Text>
+                    <Text style={{ color: t.muted, textAlign: 'center', maxWidth: 420, lineHeight: 21 }}>
+                      No one has posted a ride yet. If you're driving up, post your open seats and riders will reach out.
+                    </Text>
+                    <Button title="+ Post a ride" onPress={() => nav.push('/post')} />
+                  </View>
+                ) : null}
+              </MountainsHome>
 
               {myRides.length ? (
                 <View style={{ gap: 8 }}>
@@ -282,7 +287,7 @@ export function RideBoardScreen({
                   })}
                   {myRides.length > 3 ? (
                     <Pressable onPress={() => nav.replace('/rides')} accessibilityRole="link" style={{ alignSelf: 'flex-start', paddingVertical: 2 }}>
-                      <Text style={{ color: t.link, fontSize: 14, fontWeight: '700' }}>See all {myRides.length} in Your Rides</Text>
+                      <Text style={{ color: t.link, fontSize: 14, fontWeight: '700' }}>See all {myRides.length} in Rides</Text>
                     </Pressable>
                   ) : null}
                 </View>
