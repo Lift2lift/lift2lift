@@ -685,7 +685,7 @@ revoke execute on function public.enforce_ride_community() from public, anon, au
 -- the first person to enter each becomes its admin.
 ------------------------------------------------------------------------------
 insert into public.communities (code_hash, name) values
-  ('47f7358402a6796b8fede56bbf797a5d165e351683bb20bcd11d6dd6c6540afd', 'CU Freeride'),
+  ('361eb0bdbb554cc30f86c1686627a99fde1b942dcb2edf5f96b08d1539551f2a', 'CU Freeride'),
   ('c1f68afbdbbb73c07f670aea558bebfe52732724cd2666539a29ea065a0459c7', 'CU Freeski'),
   ('0759a7a63ec75a68eb52bb82b88afded1f1efd51af4076201fb3c7be65f0e6bf', null),
   ('668df4b5af7d36986987c2ecaa3672de107f4e9f7aa3191f92ad8cf0a249e293', null),

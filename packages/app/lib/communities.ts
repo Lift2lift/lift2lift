@@ -10,7 +10,7 @@ export function cleanCode(text: string) {
     .slice(0, COMMUNITY_CODE_LENGTH);
 }
 
-/** EMM4N9F4D → EMM-4N9-F4D, easier to read out loud and copy. */
+/** ABCDEFGHJ → ABC-DEF-GHJ, easier to read out loud and copy. */
 export function formatCode(code: string) {
   return (cleanCode(code).match(/.{1,3}/g) ?? []).join('-');
 }
