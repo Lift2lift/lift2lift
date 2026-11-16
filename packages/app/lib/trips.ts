@@ -37,9 +37,10 @@ export function passengersOn(t: Trip, leg: Leg) {
 
 export type LegEvent = { trip: Trip; leg: Leg; at: string; meet: string };
 
-/** Every leg I'm on, soonest first, skipping ones that left over 15 minutes ago. */
+/** Every leg I'm on, soonest first, skipping ones that left over 15 minutes ago. Requests the driver hasn't confirmed don't count. */
 export function upcomingLegs(trips: Trip[], now = Date.now()): LegEvent[] {
   return trips
+    .filter((trip) => trip.myStatus !== 'pending')
     .flatMap((trip) =>
       myLegs(trip)
         .map((leg) => {
@@ -111,14 +112,44 @@ export const TRIP_LABEL: Record<TripType, string> = {
   from_mountain: 'One way down',
 };
 
-/** Legs someone already has each day (driving takes the whole day; a seat takes the legs it covers). */
+/** Your seat on a board ride (a request or a confirmed booking): the legs it covers, or null if you have none. */
+export function mySeatOn(r: BoardRide, me: string | undefined): SeatLegs | null {
+  if (!me) return null;
+  if (r.myStatus) return r.myLegs ?? 'both';
+  const i = r.riderIds.indexOf(me);
+  return i >= 0 ? r.riderLegs[i] ?? 'both' : null;
+}
+
+/** Requests waiting on you, across the rides you're driving. */
+export function requestsWaiting(trips: Trip[] | null | undefined, now = Date.now()) {
+  return (trips ?? [])
+    .filter((t) => t.role === 'driver')
+    .flatMap((trip) => trip.requests.filter((q) => new Date(q.expiresAt).getTime() > now).map((request) => ({ trip, request })))
+    .sort((a, b) => a.request.expiresAt.localeCompare(b.request.expiresAt));
+}
+
+/** Your requests the driver hasn't answered yet. */
+export function myPendingRequests(trips: Trip[] | null | undefined, now = Date.now()) {
+  return (trips ?? [])
+    .filter((t) => t.myStatus === 'pending' && (!t.expiresAt || new Date(t.expiresAt).getTime() > now))
+    .sort((a, b) => a.departAt.localeCompare(b.departAt));
+}
+
+/** "a round-trip seat", "a seat up", "a seat down": what a request asks for. */
+export function seatAsk(tripType: TripType, legs: SeatLegs) {
+  if (tripType === 'round_trip') return legs === 'both' ? 'a round-trip seat' : legs === 'to' ? 'a seat up' : 'a seat down';
+  return tripType === 'to_mountain' ? 'a seat up' : 'a seat down';
+}
+
+/** Legs someone already has each day (driving takes the whole day; a seat or a request takes the legs it covers). */
 export function busyLegsByDay(rides: BoardRide[], me: string | undefined) {
   const m = new Map<string, Set<Leg>>();
   if (!me) return m;
   for (const r of rides) {
     let legs: Leg[] = [];
+    const seat = mySeatOn(r, me);
     if (r.driverId === me) legs = ['to', 'from'];
-    else if (r.riderIds.includes(me)) legs = seatLegs(r.tripType, r.riderLegs[r.riderIds.indexOf(me)] ?? 'both');
+    else if (seat) legs = seatLegs(r.tripType, seat);
     if (!legs.length) continue;
     const set = m.get(r.rideDate) ?? new Set<Leg>();
     legs.forEach((l) => set.add(l));

@@ -4,6 +4,7 @@ import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
 import { PersonAvatar, WhosInTheCar } from '../components/People';
 import { ReportSheet } from '../components/Safety';
+import { RatingBadge } from '../components/Stars';
 import { Button, Card, FormScreen, Heading, Loading, Muted, Notice } from '../components/ui';
 import { clock, dayLabel, isoDay, longDay } from '../lib/dates';
 import { RESORT_BY_ID } from '../lib/resorts';
@@ -11,23 +12,32 @@ import { useTheme } from '../lib/theme';
 import {
   CONFIRM_BEFORE_MIN,
   countdown,
+  legAt,
   LOCK_BEFORE_MIN,
+  myPendingRequests,
   passengersOn,
+  requestsWaiting,
+  seatAsk,
+  seatLegs,
   TRIP_LABEL,
   upcomingLegs,
   useNow,
   type LegEvent,
 } from '../lib/trips';
-import type { ChatMessage, Leg, Trip } from '../lib/types';
+import type { ChatMessage, Leg, SeatLegs, SeatRequest, Trip } from '../lib/types';
 import { useApi, useAuth, useMyRides, useNav } from '../providers';
 
 const legTitle = (leg: Leg, resortId: string) => `${leg === 'to' ? 'Up to' : 'Back from'} ${RESORT_BY_ID[resortId]?.name ?? resortId}`;
 
 /** Your Rides tab: the list, or one ride's day-of view (countdown, check-in, chat). */
 export function YourRidesScreen({ rideId, leg, saved }: { rideId?: string; leg?: Leg; saved?: string }) {
-  const { trips, locked } = useMyRides();
+  const { trips, locked, refresh } = useMyRides();
   const { session } = useAuth();
   const now = useNow(1000);
+  // Fresh on open, so a driver's answer (or a new request) shows right away.
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   if (!trips || !session) {
     return (
@@ -44,19 +54,59 @@ export function YourRidesScreen({ rideId, leg, saved }: { rideId?: string; leg?:
   const driving = trips
     .filter((tr) => tr.role === 'driver' && new Date(tr.returnAt ?? tr.departAt).getTime() > now)
     .sort((a, b) => a.departAt.localeCompare(b.departAt));
-  return <RidesList legs={legs} now={now} driving={driving} saved={!!saved} />;
+  return (
+    <RidesList legs={legs} now={now} driving={driving} saved={!!saved} asks={requestsWaiting(trips, now)} waiting={myPendingRequests(trips, now)} />
+  );
 }
+
+/** "a round-trip seat to Copper Mountain", "a seat down from Vail". */
+function askText(trip: Trip, legs: SeatLegs) {
+  const resort = RESORT_BY_ID[trip.resortId]?.name ?? trip.resortId;
+  const downOnly = seatLegs(trip.tripType, legs).join() === 'from';
+  return `${seatAsk(trip.tripType, legs)} ${downOnly ? 'from' : 'to'} ${resort}`;
+}
+
+/** When the seat's first leg leaves, and where to meet for it. */
+function firstLeg(trip: Trip, legs: SeatLegs) {
+  const leg = seatLegs(trip.tripType, legs)[0];
+  const at = legAt(trip, leg) ?? trip.departAt;
+  const meet = leg === 'from' && trip.tripType === 'round_trip' && trip.returnMeet ? trip.returnMeet : trip.leaveFrom;
+  return { at, meet };
+}
+
+/** "Tomorrow at 5:00 AM", or "tomorrow at 5:00 AM" in the middle of a sentence. */
+const byWhen = (iso: string, mid = false) => {
+  const d = dayLabel(isoDay(new Date(iso)));
+  return `${mid && (d === 'Today' || d === 'Tomorrow') ? d.toLowerCase() : d} at ${clock(iso)}`;
+};
 
 /* ---------------- List ---------------- */
 
-function RidesList({ legs, now, driving, saved }: { legs: LegEvent[]; now: number; driving: Trip[]; saved: boolean }) {
+function RidesList({
+  legs,
+  now,
+  driving,
+  saved,
+  asks,
+  waiting,
+}: {
+  legs: LegEvent[];
+  now: number;
+  driving: Trip[];
+  saved: boolean;
+  asks: { trip: Trip; request: SeatRequest }[];
+  waiting: Trip[];
+}) {
   const t = useTheme();
   const nav = useNav();
+  const [flash, setFlash] = useState<string | null>(null);
   const savedNote = saved ? <Notice kind="success">Ride updated. Anyone booked sees the change in the ride chat and gets a notification.</Notice> : null;
-  if (!legs.length && !driving.length) {
+  const flashNote = flash ? <Notice kind="success">{flash}</Notice> : null;
+  if (!legs.length && !driving.length && !waiting.length) {
     return (
       <FormScreen header={<AppHeader />}>
-        <Heading title="Your rides" subtitle="Rides you're driving or have a seat on show up here, with a countdown and a group chat." />
+        <Heading title="Your rides" subtitle="Rides you're driving, have a seat on, or have asked to join show up here, with a countdown and a group chat." />
+        {flashNote}
         <View style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: t.line, borderRadius: 16, padding: 28, alignItems: 'center', gap: 10 }}>
           <Text style={{ color: t.ink, fontSize: 22, fontWeight: '900', textTransform: 'uppercase' }}>Nothing booked</Text>
           <Muted center>Find a ride to the mountain, or post your open seats.</Muted>
@@ -70,6 +120,28 @@ function RidesList({ legs, now, driving, saved }: { legs: LegEvent[]; now: numbe
     <FormScreen header={<AppHeader />}>
       <Heading title="Your rides" />
       {savedNote}
+      {flashNote}
+
+      {asks.length ? (
+        <View style={{ gap: 8 }}>
+          <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>
+            {asks.length === 1 ? 'A RIDER WANTS IN' : `${asks.length} RIDERS WANT IN`}
+          </Text>
+          {asks.map(({ trip, request }) => (
+            <RequestCard key={`${trip.id}-${request.id}`} trip={trip} request={request} onAnswered={setFlash} showRide />
+          ))}
+        </View>
+      ) : null}
+
+      {waiting.length ? (
+        <View style={{ gap: 8 }}>
+          <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>WAITING ON THE DRIVER</Text>
+          {waiting.map((tr) => (
+            <PendingCard key={tr.id} trip={tr} now={now} onCancelled={setFlash} />
+          ))}
+        </View>
+      ) : null}
+
       {next ? <LegCard e={next} now={now} big /> : null}
       {rest.length ? <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>LATER</Text> : null}
       {rest.map((e) => (
@@ -87,10 +159,117 @@ function RidesList({ legs, now, driving, saved }: { legs: LegEvent[]; now: numbe
         </View>
       ) : null}
       <Muted>
-        You'll get a notification 2 hours before each ride. From {LOCK_BEFORE_MIN} minutes before, the app opens straight to your ride so you can
-        coordinate pickup.
+        When you book a seat, the driver confirms it and you get a notification. You'll get another 2 hours before each ride. From {LOCK_BEFORE_MIN}{' '}
+        minutes before, the app opens straight to your ride so you can coordinate pickup.
       </Muted>
     </FormScreen>
+  );
+}
+
+/** A rider asking for a seat on a ride you're driving: who they are, what they want, Confirm or Deny. */
+function RequestCard({ trip, request: q, onAnswered, showRide }: { trip: Trip; request: SeatRequest; onAnswered: (msg: string) => void; showRide?: boolean }) {
+  const t = useTheme();
+  const api = useApi();
+  const nav = useNav();
+  const { refresh } = useMyRides();
+  const [busy, setBusy] = useState<'yes' | 'no' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const first = q.name.split(' ')[0] || 'They';
+  const { at } = firstLeg(trip, q.legs);
+
+  async function answer(yes: boolean) {
+    setError(null);
+    setBusy(yes ? 'yes' : 'no');
+    try {
+      await api.respondToRequest(trip.id, q.id, yes);
+      onAnswered(yes ? `${first} is in. They got a notification with the pickup details.` : `Request declined. ${first} got a notification and the seat is open again.`);
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card style={{ padding: 14, gap: 10, borderColor: t.accent, borderWidth: 2 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <PersonAvatar person={q} size={48} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text onPress={() => nav.push('/u', { id: q.id })} accessibilityRole="link" style={{ color: t.ink, fontSize: 17, fontWeight: '800' }}>
+            {q.name}
+          </Text>
+          <RatingBadge value={q.rating} count={q.reviewCount} label="as a passenger" />
+        </View>
+      </View>
+      <Text style={{ color: t.ink, fontSize: 15, lineHeight: 21 }}>
+        {first} wants {askText(trip, q.legs)}
+        {showRide ? `, ${byWhen(at, true)}` : ''}.
+      </Text>
+      <Text style={{ color: t.muted, fontSize: 13, lineHeight: 18 }}>
+        Answer by {byWhen(q.expiresAt, true)}. After that the request expires and the seat opens up again.
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Button variant="ghost" title="Deny" loading={busy === 'no'} disabled={!!busy} onPress={() => answer(false)} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button title="Confirm" loading={busy === 'yes'} disabled={!!busy} onPress={() => answer(true)} />
+        </View>
+      </View>
+      {error ? <Notice kind="error">{error}</Notice> : null}
+    </Card>
+  );
+}
+
+/** A seat you asked for that the driver hasn't answered yet. */
+function PendingCard({ trip, now, onCancelled }: { trip: Trip; now: number; onCancelled: (msg: string) => void }) {
+  const t = useTheme();
+  const api = useApi();
+  const { refresh } = useMyRides();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const legs = trip.myLegs ?? 'both';
+  const { at, meet } = firstLeg(trip, legs);
+  const driver = trip.driver.name.split(' ')[0] || 'The driver';
+  const left = trip.expiresAt ? new Date(trip.expiresAt).getTime() - now : 0;
+
+  async function cancel() {
+    setError(null);
+    setBusy(true);
+    try {
+      await api.leaveSeat(trip.id);
+      onCancelled('Request cancelled.');
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card style={{ padding: 14, gap: 8 }}>
+      <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>
+        REQUEST SENT · {TRIP_LABEL[trip.tripType].toUpperCase()}
+      </Text>
+      <Text style={{ color: t.ink, fontSize: 19, fontWeight: '900', textTransform: 'uppercase' }}>{RESORT_BY_ID[trip.resortId]?.name ?? trip.resortId}</Text>
+      <Text style={{ color: t.muted, fontSize: 14 }}>
+        {byWhen(at)} · from {meet}
+        {trip.tripType === 'round_trip' && legs !== 'both' ? (legs === 'to' ? ' · ride up only' : ' · ride down only') : ''}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <PersonAvatar person={trip.driver} size={30} />
+        <Text style={{ color: t.ink, fontSize: 14, fontWeight: '700', flex: 1 }}>Waiting on {driver} to confirm</Text>
+      </View>
+      <Muted>
+        Your seat is held until {trip.expiresAt ? byWhen(trip.expiresAt, true) : 'they answer'}
+        {left > 0 && left < 6 * 3600 * 1000 ? ` (${countdown(left)} from now)` : ''}. If {driver} doesn't answer by then, the request expires. You'll get
+        a notification either way.
+      </Muted>
+      <View style={{ alignSelf: 'flex-start' }}>
+        <Button small variant="ghost" title="Cancel request" loading={busy} onPress={cancel} />
+      </View>
+      {error ? <Notice kind="error">{error}</Notice> : null}
+    </Card>
   );
 }
 
@@ -163,6 +342,11 @@ function DrivingRow({ trip, first }: { trip: Trip; first: boolean }) {
           {trip.tripType === 'round_trip' && trip.returnAt ? ` · back ${clock(trip.returnAt)}` : ''}
         </Text>
         <Text style={{ color: up || down ? t.ink : t.muted, fontSize: 13, fontWeight: '600' }}>{up || down ? seatsText : 'No riders yet'}</Text>
+        {trip.requests.length ? (
+          <Text style={{ color: t.danger, fontSize: 13, fontWeight: '800' }}>
+            {trip.requests.length === 1 ? '1 request' : `${trip.requests.length} requests`} waiting on you
+          </Text>
+        ) : null}
       </View>
       <Button small variant="ghost" title="Edit ride" onPress={() => nav.push('/post', { edit: trip.id })} />
     </View>
@@ -280,6 +464,18 @@ function RideDay({ event: e, locked }: { event: LegEvent; locked: boolean }) {
 
         {error ? <Notice kind="error">{error}</Notice> : null}
       </Card>
+
+      {/* Requests for this ride still waiting on the driver */}
+      {isDriver && trip.requests.length ? (
+        <View style={{ gap: 8 }}>
+          <Text style={{ color: t.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.8 }}>
+            {trip.requests.length === 1 ? 'A RIDER WANTS IN' : `${trip.requests.length} RIDERS WANT IN`}
+          </Text>
+          {trip.requests.map((q) => (
+            <RequestCard key={q.id} trip={trip} request={q} onAnswered={() => {}} />
+          ))}
+        </View>
+      ) : null}
 
       {/* Everyone on this leg; tap anyone to see their profile */}
       <Card style={{ padding: 16 }}>

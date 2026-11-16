@@ -5,6 +5,7 @@ import { useApi, useAuth, useMyRides, useNav, type Route } from '../providers';
 import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
 import { canHost } from '../lib/types';
+import { requestsWaiting } from '../lib/trips';
 
 const TABS: { route: Route; label: string }[] = [
   { route: '/', label: 'Mountains' },
@@ -32,7 +33,8 @@ export function AppHeader() {
     setMenuOpen(false);
     nav.push(route, params);
   };
-  const { locked } = useMyRides();
+  const { locked, trips } = useMyRides();
+  const asks = requestsWaiting(trips).length;
   // Phone layout moves tabs and Post to the bottom tab bar; ride mode hides them.
   const compact = useCompact() || !!locked;
   const first = (session?.name || session?.email || '').split(/[ @]/)[0];
@@ -70,7 +72,17 @@ export function AppHeader() {
                 accessibilityState={{ selected: active }}
                 style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 9, backgroundColor: active ? t.bg : 'transparent' }}
               >
-                <Text style={{ color: active ? t.ink : t.headerInk, fontWeight: '700', fontSize: 14 }}>{tab.label}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={{ color: active ? t.ink : t.headerInk, fontWeight: '700', fontSize: 14 }}>{tab.label}</Text>
+                  {tab.route === '/rides' && asks ? (
+                    <View
+                      accessibilityLabel={`${asks} ride request${asks === 1 ? '' : 's'} waiting`}
+                      style={{ minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: t.danger, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: '900' }}>{asks > 9 ? '9+' : asks}</Text>
+                    </View>
+                  ) : null}
+                </View>
               </Pressable>
             );
           })}

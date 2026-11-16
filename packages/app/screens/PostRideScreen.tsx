@@ -9,7 +9,7 @@ import { addDays, clockFromHHMM, dayLabel, driveText, isoDay, longDay, nextSatur
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER, earliestDeparture, MAX_PASSENGERS, maxGasPerRider, mileageCents, tripGasCap } from '../lib/rules';
-import { oneWayShare, TRIP_LABEL } from '../lib/trips';
+import { mySeatOn, oneWayShare, TRIP_LABEL } from '../lib/trips';
 import type { Community, EditableRide, TripType } from '../lib/types';
 import { useTheme } from '../lib/theme';
 import { useForecast } from '../lib/useForecast';
@@ -116,7 +116,7 @@ export function PostRideScreen({ initialResort, editRideId, initialCommunity }: 
     if (!me) return;
     api
       .listRides()
-      .then((rides) => setBusyDays(new Set(rides.filter((r) => r.id !== editRideId && (r.driverId === me || r.riderIds.includes(me))).map((r) => r.rideDate))))
+      .then((rides) => setBusyDays(new Set(rides.filter((r) => r.id !== editRideId && (r.driverId === me || !!mySeatOn(r, me))).map((r) => r.rideDate))))
       .catch(() => {});
   }, [api, session?.userId, editRideId]);
 

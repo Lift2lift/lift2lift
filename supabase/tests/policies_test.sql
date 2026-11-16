@@ -54,11 +54,18 @@ begin
   select id into v_ride from public.rides where resort_id = 'copper';
   assert public.ride_contact(v_ride) is null, 'contact hidden before claiming a seat';
 
-  -- Claim a seat, then the contact appears.
+  -- Request a seat: it holds the seat, but the contact waits for the driver.
   perform public.claim_seat(v_ride, 'both', true);
   perform public.claim_seat(v_ride, 'both', true); -- second call is a no-op
   assert (select seats_taken from public.ride_board where id = v_ride) = 1, 'seat counted once';
-  assert public.ride_contact(v_ride) = '@demo.driver', 'contact visible after claiming';
+  assert public.ride_contact(v_ride) is null, 'contact hidden while the request is pending';
+  assert (select rider_names from public.ride_board where id = v_ride) = '{}', 'pending rider not shown in the car';
+
+  -- The driver confirms, then the contact appears.
+  perform set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
+  perform public.respond_seat_request(v_ride, '33333333-3333-4333-8333-333333333333', true);
+  perform set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', false);
+  assert public.ride_contact(v_ride) = '@demo.driver', 'contact visible once confirmed';
   assert (select rider_names from public.ride_board where id = v_ride) = array['New Student'], 'rider name shown';
 
   -- Can't edit or cancel someone else's ride (RLS silently matches 0 rows).

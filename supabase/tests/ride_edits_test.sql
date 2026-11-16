@@ -50,6 +50,9 @@ begin
     raise exception 'FAIL: rider posted an update line';
   exception when insufficient_privilege then null;
   end;
+  -- Kit confirms Lou's request.
+  perform set_config('request.jwt.claim.sub', 'a7777777-7777-4777-8777-777777777777', false);
+  perform public.respond_seat_request(v_id, 'b7777777-7777-4777-8777-777777777777', true);
 end $$;
 reset role;
 
