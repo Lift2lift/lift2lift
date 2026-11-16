@@ -1,8 +1,9 @@
 -- Communities: clubs (CU Freeride, CU Freeski, ...) get a private group with
 -- its own rides. You get in with a 9-character community code.
 --
--- * Codes are handed out by Lift2Lift. Only a SHA-256 hash of each code is
---   stored here, so the codes themselves are not in this repo.
+-- * Codes are handed out by Lift2Lift. Only a slow bcrypt hash of each code is
+--   stored here, so the codes themselves are not in this repo and can't be
+--   recovered from it by guessing (see community_code_hash below).
 -- * The first person to enter a brand-new code names the community and
 --   becomes its admin. A code that already has a name (CU Freeride and
 --   CU Freeski below) makes the first person in its admin.
@@ -53,14 +54,20 @@ grant update (community_id) on public.rides to authenticated;
 -- Helpers
 ------------------------------------------------------------------------------
 -- Codes are compared without spaces or dashes, in capitals.
+--
+-- The hash is bcrypt at cost 12 with one fixed salt. A fixed salt keeps it
+-- deterministic, so a code can still be looked up by its hash, and each guess
+-- costs about 0.2 seconds. This repo is public, so the shipped hashes are too:
+-- a fast hash (like SHA-256) of a 9-character code could be cracked on one
+-- graphics card in minutes, while bcrypt at cost 12 would take centuries.
 create function public.community_code_hash(p_code text)
 returns text
 language sql
 immutable
 set search_path = ''
-as $$
-  select encode(sha256(convert_to(upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g')), 'UTF8')), 'hex');
-$$;
+as $fn$
+  select extensions.crypt(upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g')), '$2a$12$9tMiPfwSsueWwymDksShIe');
+$fn$;
 
 create function public.is_community_member(p_community_id uuid)
 returns boolean
@@ -681,57 +688,57 @@ revoke execute on function public.keep_a_community_admin() from public, anon, au
 revoke execute on function public.enforce_ride_community() from public, anon, authenticated;
 
 ------------------------------------------------------------------------------
--- The first 50 codes (hashes only). CU Freeride and CU Freeski are named;
+-- The first 50 codes (bcrypt hashes only). CU Freeride and CU Freeski are named;
 -- the first person to enter each becomes its admin.
 ------------------------------------------------------------------------------
 insert into public.communities (code_hash, name) values
-  ('361eb0bdbb554cc30f86c1686627a99fde1b942dcb2edf5f96b08d1539551f2a', 'CU Freeride'),
-  ('c1f68afbdbbb73c07f670aea558bebfe52732724cd2666539a29ea065a0459c7', 'CU Freeski'),
-  ('0759a7a63ec75a68eb52bb82b88afded1f1efd51af4076201fb3c7be65f0e6bf', null),
-  ('668df4b5af7d36986987c2ecaa3672de107f4e9f7aa3191f92ad8cf0a249e293', null),
-  ('7332093e8b193cae6a407da27abb54d10925aeeeea24126139a36093dabedb16', null),
-  ('2a6b634c6389efadbcc62c42e6f1aedfeb6e4396457e108722921bbf0001c14d', null),
-  ('4ef51f6559ab37e579a9aaa76a5ad300564132a1f502a6163a76db76c62ef4f2', null),
-  ('e0736f8f4be99c8f1c2110575f438572e4a5a74c08fc3e0d7e74620147988f33', null),
-  ('d39b3d4d759edef83de4ed47b38f7476a51e28e19a74ce1f128ac7f88ddfc645', null),
-  ('e1846bce89a98a2ecfec96c56a1f3213d446b0f844d18887b4beec707ebb35d2', null),
-  ('8a9c44e73feea682cbd1e6ae7f08a6bd8def81a551f5c4b3f33e5fdadbde0600', null),
-  ('b2b3418236a741b23581b5c05cf4297e95f8de91676a6af78bc583c3a83eeca6', null),
-  ('335ebe0cd272c1e277a532fefbe8cb7e06cd7cfba6c2b46e3a065bf8733d9511', null),
-  ('f062fd60f9f092b922048385f9c790a9c94370fd426f8eea350dc970f91123d7', null),
-  ('18cd54a0bcfde27c41147d775ecbed3b6fb3bd7b0edc5bbb81631b53256d8e2f', null),
-  ('bae2bc3ff68aba05b8619a3a46bf0c8d4ecccde1c8839d5d2b3091455bf8a788', null),
-  ('0eed097eb2ee8cd2cdf532d64204aaabb26809318534d8a74302f4dbee3d60b0', null),
-  ('2c7b0653c22f2fb31229cd64288504ce5ffd3c17d27922435b8a233007f19184', null),
-  ('9777d5f7e2ca5c9a0a8fa015f2d301adbfcd05f4aa5b8dc635361c6c98081ed5', null),
-  ('bea8251f71314d02e18a1ee757d2d844a40eb363902ebbe3c5635e75ab5ff8bb', null),
-  ('79b6014d4bb1f337f40ac92c8712fc513158fba0d0475cf90543ee46209ba2fd', null),
-  ('a71db01b78cd82fe41cca0cc56c0fbf7bc001fccc69b54fb437e410c6a264842', null),
-  ('298e369dab33c517d52bf5b6473710ccbb515830cbc815f35886a2a8cd2d208a', null),
-  ('8dd8cc5c5eccf2b251db8e5b59cd78787088923dd46ea86c342a8c3e191421f4', null),
-  ('360b4ba5ad976cd3664d8c3df66829073a8d63e179043a7017d1efb573d99030', null),
-  ('79bbefc622c9d88f5bfcecb097ad766554688d3fe1bb2ef336bc0101a6567dcc', null),
-  ('4ff3374a52808a203ea174507ea7bcb249628da20101193c2c3b76648e18601b', null),
-  ('ad49c422498507bcfe917db028240d6a0d157414b4929ff7ceeeefdfc0bacfbe', null),
-  ('faa05af9d8ca2bca9698ce7b800a38ddda593f131a171c8f98f344fdd41aa0ee', null),
-  ('1b3d866acdb24ba95fae4e5cc2fcde140d43e2692a1eb940816787a9d3d72f40', null),
-  ('c0eb4e71181f5b01ccffb8d33e7846a1e916f2e3fb3242c46636287d60b8a4d1', null),
-  ('e648a7ce94ae46ff44236bbc3af82705c16b84b24d79914c7a3728561f875696', null),
-  ('a635c188f5c0b15e550da59b40557230b77b9d05dfb6c72c851634d461da2093', null),
-  ('1055a88ebf217040b23cfd34cfd083850a327ada3bff980f0f5c24d087518ba3', null),
-  ('adb06205c060072c768d683bc9c2ddd03098900cff423a9df414a8e956d1c901', null),
-  ('de151e6b0116d59b1d589562925b709e3f09405cb12cf4e281972b96af11bf00', null),
-  ('ffd3e76d0a9cb8f92c0e1b087924966bbd720d939f0e0fb2ec49c76dd81b9549', null),
-  ('08b155de903c2848e829a3807942424ed29a7425c22f8093d5a8665cf205d333', null),
-  ('6d930e8293a1522ebd7a9e4a78f0e84deff083e7596a7bbeee61d732d00c01c9', null),
-  ('89955fcb0080897c36624dece2bc0b39740313b6e9d0965ba75dd4dc4fd76542', null),
-  ('9ec6315d996aeeefc914ac8f06818693b177b7cb61b01ac6155f99611d646d35', null),
-  ('9511df76035a50ec3fa12b486a72b510ac61f32a6e19a8661a05049493487fb6', null),
-  ('1831c0650d303a7d4d63ba6806c1d6142b179633e204377e266348f9001672c9', null),
-  ('b9166b7fcf8d304dfe99bc170ba50006abb49f10d715110e0a5065a212f7dff5', null),
-  ('ba390b77391a3056e22617b13753309f7f74ab1ad3b8e3831fac0902ed8eaf8f', null),
-  ('82bfd57a7bbe7958b0dfecdd031722c0ac193303e8cfafbe82aa2bb201f80c07', null),
-  ('ca1042c9408e66091bb6290bf2eb24a39cdf7885377bc8880d7c8cde338f5216', null),
-  ('b52254b240150a25af57169357c207cc1bba93330ff3494195334bbbc8c400e2', null),
-  ('c114b06a0e14f5e5e19b91eec47d5050f1ad1b6e7715762372781c1e424dcf55', null),
-  ('f89d47354a0331c8e437b9c78ecdd44a498659b3919cd7a2b0253b285f41ffe8', null);
+  ('$2a$12$9tMiPfwSsueWwymDksShIehdSkrd./U8wwgOyQwxZRHpIE44JqqIO', 'CU Freeride'),
+  ('$2a$12$9tMiPfwSsueWwymDksShIejeZQObIoObB8lsgQSzhBQSxUiH7rqw2', 'CU Freeski'),
+  ('$2a$12$9tMiPfwSsueWwymDksShIecM.mnhzT976ADmrBL1cbcDEneEuTN9q', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeCgAO5O1p57P90o9UjmE.J8IakriejFC', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeACVqxTe2Z6Q46VIa07UuZWAHooqDbiu', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe7AhcQVkpMMz2yDH27F9qK67j0oc6qSe', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe.HSlwH7gXVI8GMd7SiAWQnmh1A88dUe', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIedfHCnTESN9g34IpnvtNf3mdRdVTaGnK', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeaI2Sl3qid2sn8dE7dIh6WkL1o5j.mxe', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeUsXn1I6NkfpyzjWfGb5SgY.85mKKC.C', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe.tJbzqCHJ5HAsfmHd821Cgb5DqNwvrC', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeuhqTQuBSPrtS1PSIy0H3ec/4cjvXPam', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeXaEbnC9kr5iLaYHh8rnQ0Bn1/Qh1Pbe', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeWgV8zsoS8lDc8lupv9lGAS4QK/ioxBW', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeneshCDOvIG7RzSJlY67rtcm.OBtj4qW', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeSQ1nZ1W7LtWtax9MGRHe3EY92G5ThOu', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeGIuzz.N9qXk2FA4BxU2yZ6BwL4FNNDG', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeEDLZjyUlC94sP994yLgrlLu6/6Fcclu', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIep9BqzzCF/.C28O7Ju0Dv910XxcbkFCW', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeojEGtFtVO08HVxLMDSc4lbinsH1b.hG', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe8ksoh18gZUQ24tlgNOKbWB2OL1XEEXa', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe8KLMeWtQ457XT1JBRBO4A0b8mex61j2', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeetZYTcjVAuZuvvmh8C2RWfQDfgQ7H7K', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeffgN652XxNf2vVKDPP8Xg9c5j28hM5e', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeVBg7l2CN2VGqZyAGhYdWIQ.1KKAdQnu', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeWgJtzPqvwQCII7NPs9VFNfvHgZI4II2', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeA/TuNXiOE1c/LrAg/jsUzHJdg7h1tP.', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe6qxy7pAymtAgcr2xfxsqSnxd54GFnzC', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeHKMEKKdCKkpeTsgkIXmKGtIN6x0rp9e', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe3BLQFWRGeiMw.95SY39FtcJRmmJdDPq', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeJkaQi6o9EaDA2Qeg2dgqU7fx3LUC4YK', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeqKcJpob9f2MRv2gyJMHU.3Vhu9J9Wxm', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeOLJY9Y.ndf4qx7LfJ6CZPNzPNqXla9y', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe6/kji9DU3zZAQXJci8E6tJyiLCsZuvu', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe9PA6adIAp64kSezfD5r/7kb6EEzrCda', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe3cCWZSsEHLOptbC7hPbAutquoglQ9eu', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeAXsW59QX.g/Wj2p0zDtqHPpRWxoqSDy', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe05zfVhC9vGApMo9Se4ovaIR1UBmdcLS', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe1aeYKs9SkDidHCEhwCpxBFWkurKYGEW', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeUMoSEMORksXoNvwpqfOWo0YcMVNQOMW', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeIBiUxwr.z4pjY1WKuQtQaSwOG13Tg/a', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe.N4QQZjZJN3jQQGuW5Qh//pQtc.viPe', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeoalCCVmykIl5dviH6dlp9HZMFSKmYU2', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIedovkUT02M//w9w3P6dTB4R3qoC7O49e', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe8tbAW58I65BWkvfmh/hFvnLMYklZItu', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeInxsbdZekCt8o/Oe04iGgbkh.wz.MIK', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIeNTDy3r3JgJhD4ce359.HfOGYd5tsfjO', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe/JBNMzgjMqyHP5Yp3jfn.qzplTtD1MS', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe1pO9GtTuA5DljXv4jtkMgsP5K.M6Jgi', null),
+  ('$2a$12$9tMiPfwSsueWwymDksShIe./ViLljwn0pdI3TVPDmUaTQIJAHYAcq', null);
