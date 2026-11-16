@@ -236,8 +236,10 @@ do $$ begin perform public.unblock_user('e2000000-0000-4000-8000-0000000000d1');
 reset role;
 select count(*) from public.claim_due_notifications();
 
--- ===== Ride changes still reach a pending rider =====
--- Sky asks for a seat on a second ride of Dana's, a week later; Dana moves the meeting spot.
+-- ===== Ride changes still reach a pending rider, without the details =====
+-- Sky asks for a seat on a second ride of Dana's, a week later; Dana moves the
+-- meeting spot and changes her contact. Sky hears that it changed, but not the
+-- new number: that waits until Dana confirms her.
 set role authenticated;
 select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-0000000000a1', false);
 do $$
@@ -251,14 +253,20 @@ end $$;
 select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-0000000000c1', false);
 do $$ begin perform public.claim_seat((select id from rids where name = 'later'), 'both', true); end $$;
 select set_config('request.jwt.claim.sub', 'e2000000-0000-4000-8000-0000000000a1', false);
-do $$ begin update public.rides set leave_from = 'Table Mesa' where id = (select id from rids where name = 'later'); end $$;
+do $$ begin
+  update public.rides set leave_from = 'Table Mesa', contact = '720-555-0199 (cell)' where id = (select id from rids where name = 'later');
+end $$;
 reset role;
 do $$
 declare r record; n int := 0;
 begin
+  assert exists (select 1 from public.ride_messages where ride_id = (select id from rids where name = 'later') and body like '%720-555-0199%'),
+         'the chat line has the new contact (only confirmed riders can read the chat)';
   for r in select * from public.claim_due_notifications() where kind = 'ride_changed' loop
     n := n + 1;
-    assert r.user_id = 'e2000000-0000-4000-8000-0000000000c1' and r.body like 'Dana changed the ride: meet at Table Mesa.', r::text;
+    assert r.user_id = 'e2000000-0000-4000-8000-0000000000c1', r::text;
+    assert r.body = 'Dana changed a ride you asked to join. Tap to check the time and pickup spot.', r.body;
+    assert r.body not like '%720-555%', 'no contact in a pending rider''s push';
   end loop;
   assert n = 1, 'pending rider hears about changes, got ' || n;
 end $$;

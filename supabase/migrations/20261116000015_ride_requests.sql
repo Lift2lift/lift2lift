@@ -495,7 +495,9 @@ begin
   return query select d.*, null::text from public.claim_due_reminders() d;
 
   -- Ride changes reach everyone with a seat or a request, so a pending rider
-  -- hears if the driver cancels or moves the time.
+  -- hears if the driver cancels or changes the ride. The details only go to
+  -- confirmed riders: the update line can include the driver's new contact,
+  -- which stays private until the driver says yes.
   return query
   with changed as (
     update public.ride_messages m set pushed_at = now()
@@ -508,11 +510,16 @@ begin
          (case when r.trip_type = 'from_mountain' then 'from' else 'to' end)::text,
          r.depart_at,
          (case when r.cancelled_at is not null then 'Ride cancelled' else 'Ride updated' end)::text,
-         c.body,
+         case
+           when s.status = 'confirmed' then c.body
+           when r.cancelled_at is not null then coalesce(nullif(split_part(trim(d.full_name), ' ', 1), ''), 'The driver') || ' cancelled a ride you asked to join.'
+           else coalesce(nullif(split_part(trim(d.full_name), ' ', 1), ''), 'The driver') || ' changed a ride you asked to join. Tap to check the time and pickup spot.'
+         end,
          coalesce((select array_agg(t.token) from public.push_tokens t where t.user_id = s.rider_id), '{}'),
          null::text
   from changed c
   join public.rides r on r.id = c.ride_id
+  join public.profiles d on d.id = r.driver_id
   join public.ride_seats s on s.ride_id = c.ride_id;
 
   -- Requests, confirmations, denials and expiries. Anything older than a day
