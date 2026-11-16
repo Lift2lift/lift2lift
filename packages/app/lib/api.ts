@@ -2,7 +2,7 @@ import { TERMS_VERSION } from './legal';
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, ChatMessage, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
+import type { Api, BoardRide, ChatMessage, Community, CommunityPage, CommunityRole, JoinCommunityResult, PopularCommunity, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
 
 type BoardRow = {
   id: string;
@@ -34,6 +34,8 @@ type BoardRow = {
   seats_taken_to: number;
   seats_taken_from: number;
   rider_legs: SeatLegs[];
+  community_id: string | null;
+  community_name: string | null;
 };
 
 type ProfileRow = {
@@ -77,7 +79,7 @@ type VerificationRow = {
 const DOCS_BUCKET = 'driver-docs';
 
 const BOARD_COLUMNS =
-  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders, driver_driving_avg, driver_experience_avg, driver_review_count, trip_type, return_at, return_meet, seats_taken_to, seats_taken_from, rider_legs';
+  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders, driver_driving_avg, driver_experience_avg, driver_review_count, trip_type, return_at, return_meet, seats_taken_to, seats_taken_from, rider_legs, community_id, community_name';
 
 function toSession(s: SupabaseSession | null): Session | null {
   if (!s) return null;
@@ -119,7 +121,14 @@ function toRide(r: BoardRow, urls: Record<string, string>): BoardRide {
     seatsTakenTo: r.seats_taken_to ?? 0,
     seatsTakenFrom: r.seats_taken_from ?? 0,
     riderLegs: r.rider_legs ?? [],
+    communityId: r.community_id ?? null,
+    communityName: r.community_name ?? null,
   };
+}
+
+/** Community codes are 9 characters; spaces and dashes are ignored. */
+export function normalizeCommunityCode(code: string) {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 type MessageRow = { id: string; ride_id: string; sender_id: string; body: string; created_at: string; kind?: 'chat' | 'update' };
@@ -259,6 +268,7 @@ export function createApi(supabase: SupabaseClient): Api {
           gear: ride.gear,
           notes: ride.notes,
           contact: ride.contact,
+          community_id: ride.communityId,
         }),
       );
     },
@@ -298,6 +308,7 @@ export function createApi(supabase: SupabaseClient): Api {
         gear: String(r.gear ?? ''),
         notes: String(r.notes ?? ''),
         contact: String(r.contact ?? ''),
+        communityId: (r.community_id as string | null) ?? null,
         rideDate: String(r.ride_date),
         riders: Number(r.riders),
         seatsTakenTo: Number(r.seats_taken_to),
@@ -320,11 +331,112 @@ export function createApi(supabase: SupabaseClient): Api {
             gear: ride.gear,
             notes: ride.notes,
             contact: ride.contact,
+            community_id: ride.communityId,
           })
           .eq('id', rideId)
           .select('id'),
       );
       if (!data?.length) throw new Error("That ride isn't yours to edit, or it was cancelled.");
+    },
+
+    async myCommunities() {
+      const { data } = check(await supabase.rpc('my_communities'));
+      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number };
+      return ((data ?? []) as Row[]).map(
+        (c): Community => ({
+          id: c.id,
+          name: c.name,
+          description: c.description ?? '',
+          code: c.code,
+          role: c.role,
+          listed: c.listed !== false,
+          memberCount: Number(c.member_count),
+          upcomingRides: Number(c.upcoming_rides),
+          pendingRequests: Number(c.pending_requests ?? 0),
+        }),
+      );
+    },
+    async joinCommunity(code) {
+      const { data } = check(await supabase.rpc('join_community', { p_code: normalizeCommunityCode(code) }));
+      return data as JoinCommunityResult;
+    },
+    async setupCommunity(code, name, description) {
+      const { data } = check(
+        await supabase.rpc('setup_community', { p_code: normalizeCommunityCode(code), p_name: name, p_description: description }),
+      );
+      return data as JoinCommunityResult;
+    },
+    async communityPage(communityId) {
+      const { data } = check(await supabase.rpc('community_page', { p_community_id: communityId }));
+      type M = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null; role: CommunityRole; joined_at: string };
+      type Q = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null; requested_at: string };
+      const d = data as { id: string; name: string; description: string; code: string | null; listed: boolean; my_role: CommunityRole; member_count: number; members: M[]; requests: Q[] };
+      const urls = await signAvatars([...d.members, ...(d.requests ?? [])].map((m) => m.avatar_path));
+      return {
+        id: d.id,
+        name: d.name,
+        description: d.description ?? '',
+        code: d.code,
+        listed: d.listed !== false,
+        myRole: d.my_role,
+        memberCount: Number(d.member_count),
+        members: d.members.map((m) => ({
+          id: m.id,
+          name: m.full_name,
+          avatarUrl: m.avatar_path ? urls[m.avatar_path] ?? null : null,
+          gender: m.gender,
+          role: m.role,
+          joinedAt: m.joined_at,
+        })),
+        requests: (d.requests ?? []).map((q) => ({
+          id: q.id,
+          name: q.full_name,
+          avatarUrl: q.avatar_path ? urls[q.avatar_path] ?? null : null,
+          gender: q.gender,
+          requestedAt: q.requested_at,
+        })),
+      } satisfies CommunityPage;
+    },
+    async leaveCommunity(communityId) {
+      check(await supabase.rpc('leave_community', { p_community_id: communityId }));
+    },
+    async updateCommunity(communityId, name, description) {
+      check(await supabase.rpc('update_community', { p_community_id: communityId, p_name: name, p_description: description }));
+    },
+    async removeCommunityMember(communityId, userId) {
+      check(await supabase.rpc('remove_community_member', { p_community_id: communityId, p_user_id: userId }));
+    },
+    async setCommunityRole(communityId, userId, role) {
+      check(await supabase.rpc('set_community_role', { p_community_id: communityId, p_user_id: userId, p_role: role }));
+    },
+    async resetCommunityCode(communityId) {
+      const { data } = check(await supabase.rpc('reset_community_code', { p_community_id: communityId }));
+      return String(data);
+    },
+    async popularCommunities() {
+      const { data } = check(await supabase.rpc('popular_communities', { p_limit: 20 }));
+      type Row = { id: string; name: string; description: string; member_count: number; upcoming_rides: number; my_status: PopularCommunity['myStatus'] };
+      return ((data ?? []) as Row[]).map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description ?? '',
+        memberCount: Number(c.member_count),
+        upcomingRides: Number(c.upcoming_rides),
+        myStatus: c.my_status,
+      }));
+    },
+    async requestToJoin(communityId) {
+      const { data } = check(await supabase.rpc('request_to_join', { p_community_id: communityId }));
+      return data === 'member' ? 'member' : 'requested';
+    },
+    async cancelJoinRequest(communityId) {
+      check(await supabase.rpc('cancel_join_request', { p_community_id: communityId }));
+    },
+    async respondJoinRequest(communityId, userId, approve) {
+      check(await supabase.rpc('respond_join_request', { p_community_id: communityId, p_user_id: userId, p_approve: approve }));
+    },
+    async setCommunityListed(communityId, listed) {
+      check(await supabase.rpc('set_community_listed', { p_community_id: communityId, p_listed: listed }));
     },
 
     async myFriends() {

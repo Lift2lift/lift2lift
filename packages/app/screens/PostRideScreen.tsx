@@ -10,7 +10,7 @@ import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER, earliestDeparture, MAX_PASSENGERS, maxGasPerRider, mileageCents, tripGasCap } from '../lib/rules';
 import { oneWayShare, TRIP_LABEL } from '../lib/trips';
-import type { EditableRide, TripType } from '../lib/types';
+import type { Community, EditableRide, TripType } from '../lib/types';
 import { useTheme } from '../lib/theme';
 import { useForecast } from '../lib/useForecast';
 import { canHost, type DriverVerification } from '../lib/types';
@@ -28,8 +28,8 @@ const hhmm = (iso: string) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-/** Post a ride, or edit one you posted (`editRideId`). */
-export function PostRideScreen({ initialResort, editRideId }: { initialResort?: string; editRideId?: string }) {
+/** Post a ride, or edit one you posted (`editRideId`). `initialCommunity` starts it as that community's ride. */
+export function PostRideScreen({ initialResort, editRideId, initialCommunity }: { initialResort?: string; editRideId?: string; initialCommunity?: string }) {
   const t = useTheme();
   const api = useApi();
   const nav = useNav();
@@ -52,6 +52,13 @@ export function PostRideScreen({ initialResort, editRideId }: { initialResort?: 
   const [contact, setContact] = useState('');
   const [notes, setNotes] = useState('');
   const [allMountains, setAllMountains] = useState(false);
+  // Who sees it: everyone (null) or one of your communities.
+  const [communityId, setCommunityId] = useState<string | null>(initialCommunity ?? null);
+  const [communities, setCommunities] = useState<Community[]>([]);
+  useEffect(() => {
+    api.myCommunities().then(setCommunities).catch(() => {});
+  }, [api]);
+  const community = communityId ? communities.find((c) => c.id === communityId) ?? null : null;
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -78,6 +85,7 @@ export function PostRideScreen({ initialResort, editRideId }: { initialResort?: 
         setGear(r.gear || GEAR_OPTIONS[0]);
         setContact(r.contact);
         setNotes(r.notes);
+        setCommunityId(r.communityId);
       })
       .catch((e: Error) => setEditError(e.message));
   }, [api, editRideId]);
@@ -166,6 +174,7 @@ export function PostRideScreen({ initialResort, editRideId }: { initialResort?: 
         gear,
         notes: notes.trim().slice(0, 280),
         contact: contact.trim().slice(0, 60),
+        communityId,
       };
       if (editRideId) {
         // Keep the exact original times when the picker didn't change them.
@@ -178,7 +187,8 @@ export function PostRideScreen({ initialResort, editRideId }: { initialResort?: 
       }
       await api.postRide(ride);
       refreshMyRides();
-      nav.replace('/', { resort: resortId, day });
+      if (communityId) nav.replace('/community', { id: communityId });
+      else nav.replace('/', { resort: resortId, day });
     } catch (e) {
       setError((e as Error).message);
       setSaving(false);
@@ -195,7 +205,14 @@ export function PostRideScreen({ initialResort, editRideId }: { initialResort?: 
           subtitle={booked ? `${original!.riders} ${original!.riders === 1 ? 'rider is' : 'riders are'} booked. They'll see your changes in the ride chat and get a notification.` : 'Nobody has booked yet, so you can change anything.'}
         />
       ) : (
-        <Heading title="Post a ride" subtitle="Riders see this on the board. Only people who claim a seat see how to reach you." />
+        <Heading
+          title="Post a ride"
+          subtitle={
+            community
+              ? `Only ${community.name} members see this ride. Only people who claim a seat see how to reach you.`
+              : 'Riders see this on the board. Only people who claim a seat see how to reach you.'
+          }
+        />
       )}
       {editError ? (
         <>
@@ -206,6 +223,32 @@ export function PostRideScreen({ initialResort, editRideId }: { initialResort?: 
         <Loading label="Loading your ride…" />
       ) : (
       <>
+
+      {communities.length || communityId ? (
+        <View style={{ gap: 8 }}>
+          <Label>Post to</Label>
+          {booked ? (
+            <Text style={{ color: t.ink, fontSize: 16, fontWeight: '800' }}>
+              {community ? community.name : 'Everyone on Lift2Lift'}
+              <Text style={{ color: t.muted, fontSize: 13, fontWeight: '500' }}>{'  Riders are booked, so who can see it stays the same.'}</Text>
+            </Text>
+          ) : (
+            <>
+              <ChipRow wrap>
+                <Chip label="Everyone on Lift2Lift" selected={!communityId} onPress={() => setCommunityId(null)} />
+                {communities.map((c) => (
+                  <Chip key={c.id} label={c.name} selected={communityId === c.id} onPress={() => setCommunityId(c.id)} />
+                ))}
+              </ChipRow>
+              <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
+                {community
+                  ? `Members only: just ${community.name} members can see and book this ride.`
+                  : 'Anyone on Lift2Lift can see and book it. Pick a community to keep it to your club.'}
+              </Text>
+            </>
+          )}
+        </View>
+      ) : null}
 
       <View style={{ gap: 8 }}>
         <Label>Mountain</Label>

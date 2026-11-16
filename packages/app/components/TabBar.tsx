@@ -5,9 +5,9 @@ import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
 import { upcomingLegs } from '../lib/trips';
 import { useAuth, useMyRides, useNav, type Route } from '../providers';
-import { CarIcon, MountainIcon } from './TabIcons';
+import { CarIcon, GroupIcon, MountainIcon } from './TabIcons';
 
-/** Bottom tab bar for the phone layout: Mountains, Rides, Post, Snow, Profile. */
+/** Bottom tab bar for the phone layout: Mountains, Rides, Post, Communities, Snow, Profile. */
 export function TabBar() {
   const t = useTheme();
   const nav = useNav();
@@ -43,6 +43,13 @@ export function TabBar() {
           <Text style={{ color: t.accentInk, fontSize: 20, fontWeight: '900', lineHeight: 22 }}>+</Text>
         </View>
       ),
+    },
+    // Clubs' private groups, joined with a code.
+    {
+      route: '/communities',
+      label: 'Communities',
+      match: ['/communities', '/community'],
+      icon: (a) => <GroupIcon color={a ? t.ink : t.muted} cutout={t.surface} />,
     },
     { route: '/snow', label: 'Snow', match: ['/snow'], icon: (a) => <Text style={{ fontSize: 21, color: a ? t.snow : t.muted }}>❄</Text> },
     {
@@ -88,10 +95,17 @@ export function TabBar() {
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             accessibilityLabel={tab.label}
-            style={({ pressed }) => ({ flex: 1, alignItems: 'center', gap: 2, paddingVertical: 2, opacity: pressed ? 0.7 : 1 })}
+            style={({ pressed }) => ({ flex: 1, minWidth: 0, alignItems: 'center', gap: 2, paddingVertical: 2, opacity: pressed ? 0.7 : 1 })}
           >
             <View style={{ height: 28, alignItems: 'center', justifyContent: 'center' }}>{tab.icon(active)}</View>
-            <Text style={{ color: active ? t.ink : t.muted, fontSize: 11, fontWeight: active ? '800' : '600' }}>{tab.label}</Text>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              style={{ color: active ? t.ink : t.muted, fontSize: 10.5, fontWeight: active ? '800' : '600', letterSpacing: -0.1 }}
+            >
+              {tab.label}
+            </Text>
           </Pressable>
         );
       })}

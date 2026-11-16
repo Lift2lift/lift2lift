@@ -53,6 +53,9 @@ export type BoardRide = {
   seatsTakenTo: number;
   seatsTakenFrom: number;
   riderLegs: SeatLegs[];
+  /** Posted to a community: only its members (and people already booked) see it. */
+  communityId: string | null;
+  communityName: string | null;
 };
 
 export type Person = { id: string; name: string; avatarUrl: string | null; gender: Gender | null };
@@ -233,10 +236,67 @@ export type NewRide = {
   gear: string;
   notes: string;
   contact: string;
+  /** null = everyone on Lift2Lift; otherwise only that community's members. */
+  communityId: string | null;
 };
 
 /** A ride as the driver edits it, plus what's already booked. */
 export type EditableRide = NewRide & { id: string; rideDate: string; riders: number; seatsTakenTo: number; seatsTakenFrom: number };
+
+export type CommunityRole = 'admin' | 'member';
+
+/** A community you're in, for the Communities tab. */
+export type Community = {
+  id: string;
+  name: string;
+  description: string;
+  /** The 9-character code. Admins only (null for members): admins send it out as an invite. */
+  code: string | null;
+  role: CommunityRole;
+  /** Shown in Popular communities. */
+  listed: boolean;
+  memberCount: number;
+  upcomingRides: number;
+  /** Requests to join waiting for an admin (0 for members). */
+  pendingRequests: number;
+};
+
+/** A community in Popular communities, with where you stand. */
+export type PopularCommunity = {
+  id: string;
+  name: string;
+  description: string;
+  memberCount: number;
+  upcomingRides: number;
+  myStatus: 'member' | 'requested' | 'none';
+};
+
+export type JoinRequest = Person & { requestedAt: string };
+
+export type CommunityMember = Person & { role: CommunityRole; joinedAt: string };
+
+export type CommunityPage = {
+  id: string;
+  name: string;
+  description: string;
+  /** Admins only. */
+  code: string | null;
+  listed: boolean;
+  myRole: CommunityRole;
+  memberCount: number;
+  members: CommunityMember[];
+  /** Waiting requests to join (admins only; empty for members). */
+  requests: JoinRequest[];
+};
+
+/**
+ * After entering a code: joined (or already in), a brand-new code that needs a
+ * name first ('needs_setup'), or no match.
+ */
+export type JoinCommunityResult =
+  | { status: 'joined' | 'already'; id: string; name: string; role?: CommunityRole }
+  | { status: 'needs_setup' }
+  | { status: 'not_found' };
 
 export type DayForecast = {
   date: string; // YYYY-MM-DD, Mountain Time
@@ -307,6 +367,28 @@ export interface Api {
   startIdentityCheck(platform: DeviceServices['platform']): Promise<{ url?: string; status: 'pending' | 'processing' | 'verified' }>;
 
   getForecast(): Promise<Forecast>;
+
+  /** Communities: clubs' private groups, joined with a 9-character code. */
+  myCommunities(): Promise<Community[]>;
+  joinCommunity(code: string): Promise<JoinCommunityResult>;
+  /** A brand-new code: name the community and become its admin. */
+  setupCommunity(code: string, name: string, description: string): Promise<JoinCommunityResult>;
+  communityPage(communityId: string): Promise<CommunityPage>;
+  leaveCommunity(communityId: string): Promise<void>;
+  /** Admins only. */
+  updateCommunity(communityId: string, name: string, description: string): Promise<void>;
+  removeCommunityMember(communityId: string, userId: string): Promise<void>;
+  setCommunityRole(communityId: string, userId: string, role: CommunityRole): Promise<void>;
+  /** Makes a new code; the old one stops working. Returns the new code. */
+  resetCommunityCode(communityId: string): Promise<string>;
+  /** Most members first, with your status in each. */
+  popularCommunities(): Promise<PopularCommunity[]>;
+  /** Ask to join. Returns 'member' if you're already in. */
+  requestToJoin(communityId: string): Promise<'requested' | 'member'>;
+  cancelJoinRequest(communityId: string): Promise<void>;
+  /** Admins only. */
+  respondJoinRequest(communityId: string, userId: string, approve: boolean): Promise<void>;
+  setCommunityListed(communityId: string, listed: boolean): Promise<void>;
   /** Live drive time in minutes, with current traffic, from a spot to each mountain (keyed by resort id). */
   getDriveTimes(lat: number, lon: number): Promise<Record<string, number>>;
 

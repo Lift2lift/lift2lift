@@ -6,7 +6,14 @@ import { Suspense } from 'react';
 
 function Screen() {
   const q = useSearchParams();
-  return <PostRideScreen key={q.get('edit') ?? 'new'} initialResort={q.get('resort') ?? undefined} editRideId={q.get('edit') ?? undefined} />;
+  return (
+    <PostRideScreen
+      key={q.get('edit') ?? 'new'}
+      initialResort={q.get('resort') ?? undefined}
+      editRideId={q.get('edit') ?? undefined}
+      initialCommunity={q.get('community') ?? undefined}
+    />
+  );
 }
 
 export default function Page() {

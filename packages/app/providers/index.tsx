@@ -57,6 +57,8 @@ export type Route =
   | '/review'
   | '/rides'
   | '/friends'
+  | '/communities'
+  | '/community'
   | '/verified'
   | '/sign-in'
   | '/sign-up'
