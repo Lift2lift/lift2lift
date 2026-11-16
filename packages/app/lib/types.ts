@@ -56,15 +56,38 @@ export type BoardRide = {
   /** Posted to a community: only its members (and people already booked) see it. */
   communityId: string | null;
   communityName: string | null;
+  /** Requests waiting on the driver. They hold seats (counted in seatsTaken) but aren't in riderIds yet. */
+  seatsPending: number;
+  /** Your seat on this ride, if you have one: a request ('pending') or a booking the driver confirmed. */
+  myStatus: SeatStatus | null;
+  myLegs: SeatLegs | null;
+};
+
+/** A seat starts as a request; the driver confirms it (or denies it, and it's gone). */
+export type SeatStatus = 'pending' | 'confirmed';
+
+/** Someone asking for a seat on a ride you're driving. */
+export type SeatRequest = Person & {
+  legs: SeatLegs;
+  requestedAt: string;
+  /** Requests run out 2 hours before the first leg they cover. */
+  expiresAt: string;
+  /** Their average rating as a passenger, if anyone has reviewed them. */
+  rating: number | null;
+  reviewCount: number;
 };
 
 export type Person = { id: string; name: string; avatarUrl: string | null; gender: Gender | null };
 
-/** A trip in Your Rides: one I'm driving or have a seat on. */
+/** A trip in Your Rides: one I'm driving, have a seat on, or have asked to join. */
 export type Trip = {
   id: string;
   role: 'driver' | 'passenger';
   myLegs: SeatLegs | null;
+  /** Passengers only. While 'pending', contact, passengers and check-ins are empty. */
+  myStatus: SeatStatus | null;
+  /** A pending request's deadline. */
+  expiresAt: string | null;
   resortId: string;
   tripType: TripType;
   departAt: string;
@@ -76,6 +99,8 @@ export type Trip = {
   contact: string;
   driver: Person;
   passengers: (Person & { legs: SeatLegs })[];
+  /** Driver only: requests waiting on your answer. */
+  requests: SeatRequest[];
   checkins: { leg: Leg; riderId: string; riderConfirmedAt: string | null; driverStatus: 'picked_up' | 'no_show' | null }[];
 };
 
@@ -329,8 +354,14 @@ export interface Api {
   listRides(): Promise<BoardRide[]>;
   postRide(ride: NewRide): Promise<void>;
   cancelRide(rideId: string): Promise<void>;
-  /** Books a seat. `acknowledgedNotice` must be true: the rider tapped "Acknowledge and book" on the Colorado carpool notice. */
+  /**
+   * Requests a seat; the driver gets a push to confirm or deny it. `acknowledgedNotice` must be true:
+   * the rider tapped "Acknowledge and request" on the Colorado carpool notice.
+   */
   claimSeat(rideId: string, legs: SeatLegs, acknowledgedNotice: boolean): Promise<void>;
+  /** Driver only: say yes or no to a request. The rider gets a push either way. */
+  respondToRequest(rideId: string, riderId: string, confirm: boolean): Promise<void>;
+  /** Gives up your seat, or cancels your request. */
   leaveSeat(rideId: string): Promise<void>;
   removeRider(rideId: string, riderId: string): Promise<void>;
   rideContact(rideId: string): Promise<string | null>;

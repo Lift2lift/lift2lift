@@ -89,7 +89,7 @@ do $$ begin
     perform public.claim_seat((select id from public.rides where driver_id = 'd2222222-2222-4222-8222-222222222222'), 'both', true);
     raise exception 'FAIL: overlapping legs';
   exception when raise_exception then
-    assert sqlerrm like 'You already have a seat that day.%', sqlerrm;
+    assert sqlerrm like 'You already have a seat or a request that day.%', sqlerrm;
   end;
 end $$;
 reset role;
@@ -107,6 +107,23 @@ begin
   end;
   perform public.claim_seat(v_uma, 'from', true); -- down has only Rob
   assert (select seats_taken_to = 2 and seats_taken_from = 2 from public.ride_board where id = v_uma), 'both legs full now';
+
+  -- Requests aren't on the ride yet: no chat until the driver says yes.
+  begin
+    insert into public.ride_messages (ride_id, body) values (v_uma, 'hi');
+    raise exception 'FAIL: pending rider posted';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- The drivers confirm everyone.
+  perform set_config('request.jwt.claim.sub', 'd1111111-1111-4111-8111-111111111111', false);
+  perform public.respond_seat_request(v_uma, 'e1111111-1111-4111-8111-111111111111', true);
+  perform public.respond_seat_request(v_uma, 'e2222222-2222-4222-8222-222222222222', true);
+  perform public.respond_seat_request(v_uma, 'e3333333-3333-4333-8333-333333333333', true);
+  perform set_config('request.jwt.claim.sub', 'd2222222-2222-4222-8222-222222222222', false);
+  perform public.respond_seat_request((select id from public.rides where driver_id = 'd2222222-2222-4222-8222-222222222222'),
+                                      'e1111111-1111-4111-8111-111111111111', true);
+  perform set_config('request.jwt.claim.sub', 'e3333333-3333-4333-8333-333333333333', false);
 
   -- Oz isn't on Dev's ride: can't read or post in its chat.
   begin

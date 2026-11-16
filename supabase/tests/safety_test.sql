@@ -34,6 +34,10 @@ do $$
 declare v_ride uuid := (select id from sids where name = 'ride'); v_msg uuid;
 begin
   perform public.claim_seat(v_ride, 'both', true);
+  -- Dee confirms Max's request, which opens the chat.
+  perform set_config('request.jwt.claim.sub', 'c8888888-8888-4888-8888-888888888881', false);
+  perform public.respond_seat_request(v_ride, 'c8888888-8888-4888-8888-888888888882', true);
+  perform set_config('request.jwt.claim.sub', 'c8888888-8888-4888-8888-888888888882', false);
   insert into public.ride_messages (ride_id, body) values (v_ride, 'See you at Kittredge') returning id into v_msg;
   insert into sids values ('msg', v_msg);
 

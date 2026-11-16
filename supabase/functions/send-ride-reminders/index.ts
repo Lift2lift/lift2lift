@@ -1,9 +1,12 @@
-// Sends ride reminders as push notifications. Runs every minute (see the
+// Sends ride reminders and seat-request updates as push notifications. Runs every minute (see the
 // cron setup in the README). claim_due_notifications() returns each reminder
 // once and records it as sent, so overlapping runs never double-send.
 //
 //   2 hours before each leg   everyone on it: "Leaving in 2 hours"
 //   5 minutes before          passengers: "Confirm your ride"; driver: "Confirm your passengers"
+//   ride changed or cancelled everyone with a seat or a request
+//   seat requests             driver: "New ride request" (confirm or deny)
+//                             rider: "You're in!", "Request declined" or "Request expired"
 //
 // Pushes go through Expo's push service, which delivers to Apple (APNs).
 
@@ -12,7 +15,22 @@ import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
 const EXPO_ACCESS_TOKEN = Deno.env.get('EXPO_ACCESS_TOKEN') ?? ''; // optional, for Expo's enhanced push security
 
-type Due = { user_id: string; kind: string; ride_id: string; leg: string; leg_at: string; title: string; body: string; tokens: string[] };
+type Due = {
+  user_id: string;
+  kind: string;
+  ride_id: string;
+  leg: string;
+  leg_at: string;
+  title: string;
+  body: string;
+  tokens: string[];
+  /** Where a tap goes. Set for request pushes; reminders open the ride in Your Rides. */
+  url?: string | null;
+};
+
+// Time-sensitive breaks through Focus modes on iOS: for things that need an
+// answer soon. Confirmations and denials are news, not a deadline.
+const ACTIVE = new Set(['two_hours', 'seat_confirmed', 'seat_denied', 'request_expired']);
 
 Deno.serve(async (req) => {
   if (!CRON_SECRET || req.headers.get('Authorization') !== `Bearer ${CRON_SECRET}`) {
@@ -33,9 +51,8 @@ Deno.serve(async (req) => {
       title: d.title,
       body: d.body,
       sound: 'default',
-      // Time-sensitive breaks through Focus modes on iOS.
-      interruptionLevel: d.kind === 'two_hours' ? 'active' : 'time-sensitive',
-      data: { url: `lift2lift:///rides?ride=${d.ride_id}&leg=${d.leg}`, rideId: d.ride_id, leg: d.leg, kind: d.kind, legAt: d.leg_at },
+      interruptionLevel: ACTIVE.has(d.kind) ? 'active' : 'time-sensitive',
+      data: { url: d.url ?? `lift2lift:///rides?ride=${d.ride_id}&leg=${d.leg}`, rideId: d.ride_id, leg: d.leg, kind: d.kind, legAt: d.leg_at },
     })),
   );
 

@@ -4,7 +4,7 @@ import { clock, driveText, DOW, isoDay, MON } from '../lib/dates';
 import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID } from '../lib/resorts';
 import { bookingClosed, CARPOOL_DISCLAIMER } from '../lib/rules';
-import { legAt, oneWayShare, seatLegs, seatsOpen, TRIP_LABEL, tripLegs } from '../lib/trips';
+import { legAt, mySeatOn, oneWayShare, seatLegs, seatsOpen, TRIP_LABEL, tripLegs } from '../lib/trips';
 import { Avatar } from './Avatar';
 import { PersonChip } from './People';
 import { RatingBadge } from './Stars';
@@ -52,7 +52,11 @@ export function RideCard({
   const day = isoDay(d);
   const resort = RESORT_BY_ID[ride.resortId];
   const mine = ride.driverId === me;
-  const riding = !!me && ride.riderIds.includes(me);
+  // Your seat: a request waiting on the driver, or a booking they confirmed.
+  const myLegs = mine ? null : mySeatOn(ride, me);
+  const riding = !!myLegs;
+  const requested = riding && ride.myStatus === 'pending';
+  const confirmed = riding && !requested;
   const left = Math.max(0, ride.seatsTotal - ride.seatsTaken);
   const wx = forecastFor(forecast, ride.resortId, day);
   const legs = tripLegs(ride.tripType);
@@ -65,16 +69,16 @@ export function RideCard({
   const closed = legs.every((leg) => bookingClosed(legAt(ride, leg) ?? ride.departAt));
   const busyThatDay = !mine && !riding && legs.every((leg) => taken.has(leg));
   const allFull = legs.every((leg) => seatsOpen(ride, leg) === 0);
-  const myLegs = riding ? ride.riderLegs[ride.riderIds.indexOf(me!)] ?? 'both' : null;
   const firstName = ride.driverName.split(' ')[0] || 'the driver';
   const friendsRiding = friendIds ? ride.riderIds.filter((id) => friendIds.has(id)).length : 0;
   // Booking: pick legs (round trips), confirm one way if it's one way, then acknowledge
   // Colorado's carpool notice (C.R.S. 43-1-127(1)(c)) before the seat is claimed. Every booking.
+  // Booking sends the driver a request; the seat is held until they confirm or deny it.
   const [sheet, setSheet] = useState<null | 'legs' | { oneWay: SeatLegs; leg: Leg } | { notice: SeatLegs }>(null);
   const book = (l: SeatLegs) => setSheet({ notice: l });
   const acknowledgeAndBook = (l: SeatLegs) => {
     setSheet(null);
-    run(() => api.claimSeat(ride.id, l, true), `Seat saved. It's in your Rides tab, and ${firstName} is in your ride chat.`);
+    run(() => api.claimSeat(ride.id, l, true), `Request sent. ${firstName} gets a notification to confirm or deny it, and you'll hear back as soon as they answer.`);
   };
   const bookingLine = (l: SeatLegs) => {
     const what = ride.tripType !== 'round_trip' ? TRIP_LABEL[ride.tripType] : l === 'both' ? 'Round trip' : l === 'to' ? 'Ride up only' : 'Ride down only';
@@ -129,6 +133,10 @@ export function RideCard({
         <Button small variant="ghost" title="Edit" onPress={() => nav.push('/post', { edit: ride.id })} />
         <Button small variant="danger" title="Cancel ride" onPress={() => setConfirmCancel(true)} />
       </View>
+    );
+  } else if (requested) {
+    action = (
+      <Button small variant="ghost" title="Cancel request" loading={busy} onPress={() => run(() => api.leaveSeat(ride.id), 'Request cancelled.')} />
     );
   } else if (riding) {
     action = (
@@ -198,6 +206,9 @@ export function RideCard({
                   <Text style={{ color: t.ink, fontSize: 15, lineHeight: 22 }}>{CARPOOL_DISCLAIMER}</Text>
                 </View>
                 <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>{bookingLine(sheet.notice)}</Text>
+                <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
+                  {firstName} gets a request to confirm. Your seat is held until they answer, and you'll get a notification either way.
+                </Text>
                 <Button title="Acknowledge and book" loading={busy} onPress={() => acknowledgeAndBook(sheet.notice)} />
                 <Button variant="ghost" title="Cancel" onPress={() => setSheet(null)} />
               </>
@@ -297,10 +308,17 @@ export function RideCard({
               {friendsRiding === 1 ? `${firstOf(ride.riderNames[ride.riderIds.findIndex((id) => friendIds!.has(id))])} is riding` : `${friendsRiding} friends riding`}
             </Text>
           ) : null}
-          {myLegs ? (
+          {confirmed && myLegs ? (
             <Text style={{ color: t.ok, fontSize: 12, fontWeight: '800' }}>
               ✓ You're booked{ride.tripType === 'round_trip' ? (myLegs === 'both' ? ' both ways' : myLegs === 'to' ? ' for the ride up' : ' for the ride down') : ''}
             </Text>
+          ) : null}
+          {requested && myLegs ? (
+            <View style={{ backgroundColor: t.chip, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+              <Text style={{ color: t.ink, fontSize: 12, fontWeight: '800' }}>
+                Requested{ride.tripType === 'round_trip' ? (myLegs === 'both' ? ' both ways' : myLegs === 'to' ? ' · ride up' : ' · ride down') : ''} · waiting on {firstName}
+              </Text>
+            </View>
           ) : null}
         </View>
 
@@ -337,7 +355,10 @@ export function RideCard({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <View style={{ flexDirection: 'row', gap: 4 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             {Array.from({ length: ride.seatsTotal }, (_, i) => {
+              // Confirmed riders first (filled), then seats held by requests (dashed outline).
               const rid = ride.riderIds[i];
+              const held = !rid && i < ride.riderIds.length + ride.seatsPending;
+              const myHold = held && requested && i === ride.riderIds.length;
               const fill = rid ? (rid === me ? t.accent : t.ink) : 'transparent';
               return (
                 <View
@@ -349,7 +370,8 @@ export function RideCard({
                     borderBottomLeftRadius: 6,
                     borderBottomRightRadius: 6,
                     borderWidth: 2,
-                    borderColor: rid === me ? t.accent : t.ink,
+                    borderStyle: held ? 'dashed' : 'solid',
+                    borderColor: rid === me || myHold ? t.accent : held ? t.muted : t.ink,
                     backgroundColor: fill,
                   }}
                 />
@@ -365,6 +387,23 @@ export function RideCard({
           </Text>
           <Text style={{ color: t.muted, fontSize: 13 }}>· {ride.gear}</Text>
         </View>
+
+        {mine && ride.seatsPending > 0 ? (
+          <Pressable
+            onPress={() => nav.push('/rides')}
+            accessibilityRole="link"
+            style={({ pressed }) => ({ alignSelf: 'flex-start', backgroundColor: t.accent, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, opacity: pressed ? 0.85 : 1 })}
+          >
+            <Text style={{ color: t.accentInk, fontSize: 13, fontWeight: '800' }}>
+              {ride.seatsPending === 1 ? '1 request' : `${ride.seatsPending} requests`} waiting on you · Confirm or deny ›
+            </Text>
+          </Pressable>
+        ) : null}
+        {requested ? (
+          <Text style={{ color: t.muted, fontSize: 13, lineHeight: 18 }}>
+            Your seat is held while {firstName} decides. You'll get a notification when they confirm or deny it.
+          </Text>
+        ) : null}
 
         {busyThatDay && !allFull && !closed ? (
           <Text style={{ color: t.muted, fontSize: 13 }}>You already have a ride that day. It's one ride per person per day.</Text>
@@ -440,7 +479,7 @@ export function RideCard({
             {ride.driverVerified ? (
               <Text style={{ color: t.ok, fontSize: 12, fontWeight: '700' }}>✓ ID verified · insurance on file</Text>
             ) : null}
-            {(mine || riding) &&
+            {(mine || confirmed) &&
               (contact ? (
                 <Text selectable style={{ color: t.ink, fontSize: 14, fontWeight: '700', fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) }}>
                   {contact}

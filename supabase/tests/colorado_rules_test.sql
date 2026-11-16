@@ -96,7 +96,7 @@ begin
     perform public.claim_seat(v_copper, 'both', true);
     raise exception 'FAIL: two seats same day';
   exception when raise_exception then
-    assert sqlerrm like 'You already have a seat that day.%', sqlerrm;
+    assert sqlerrm like 'You already have a seat or a request that day.%', sqlerrm;
   end;
 
   -- Can't post a ride on a day you're riding.

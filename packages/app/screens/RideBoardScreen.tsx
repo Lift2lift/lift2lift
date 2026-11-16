@@ -12,7 +12,7 @@ import { addDays, dayLabel, driveText, isoDay, longDay } from '../lib/dates';
 import { isPassFilter, PASS_LABEL, PASS_NOTES, PASS_SEASON, passesFor } from '../lib/passes';
 import { RESORT_BY_ID } from '../lib/resorts';
 import { useTheme } from '../lib/theme';
-import { seatLegs, seatsOpen, tripLegs } from '../lib/trips';
+import { busyLegsByDay, mySeatOn, seatsOpen, tripLegs } from '../lib/trips';
 import type { BoardRide, Leg, PendingReview } from '../lib/types';
 import { useForecast } from '../lib/useForecast';
 import { useApi, useAuth, useNav } from '../providers';
@@ -88,22 +88,9 @@ export function RideBoardScreen({
   const today = isoDay(new Date());
   const lastDay = all.reduce((m, r) => (r.rideDate > m ? r.rideDate : m), isoDay(addDays(new Date(), 30)));
   const onDay = (r: BoardRide) => day === 'all' || isoDay(new Date(r.departAt)) === day;
-  const isMine = (r: BoardRide) => r.driverId === me || (!!me && r.riderIds.includes(me));
-  // Legs already covered each day. Driving takes the whole day; a seat takes the legs it covers.
-  const busyDays = useMemo(() => {
-    const m = new Map<string, Set<Leg>>();
-    for (const r of all) {
-      if (!me) continue;
-      let legs: Leg[] = [];
-      if (r.driverId === me) legs = ['to', 'from'];
-      else if (r.riderIds.includes(me)) legs = seatLegs(r.tripType, r.riderLegs[r.riderIds.indexOf(me)] ?? 'both');
-      if (!legs.length) continue;
-      const set = m.get(r.rideDate) ?? new Set<Leg>();
-      legs.forEach((l) => set.add(l));
-      m.set(r.rideDate, set);
-    }
-    return m;
-  }, [rides, me]);
+  const isMine = (r: BoardRide) => r.driverId === me || !!mySeatOn(r, me);
+  // Legs already covered each day. Driving takes the whole day; a seat or a request takes the legs it covers.
+  const busyDays = useMemo(() => busyLegsByDay(all, me), [rides, me]);
   const seatsLeft = (rs: BoardRide[]) => rs.reduce((n, r) => n + Math.max(0, r.seatsTotal - r.seatsTaken), 0);
 
   // Mountain view
