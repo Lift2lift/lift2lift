@@ -380,6 +380,8 @@ export interface Api {
   searchPeople(query: string): Promise<FriendPerson[]>;
 
   getProfile(userId: string): Promise<ProfilePage | null>;
+  /** Your own photo and gender, for the header's account button. */
+  myPhoto(): Promise<{ avatarUrl: string | null; gender: Gender | null }>;
 
   getReviews(userId: string): Promise<{ summary: RatingSummary; reviews: Review[] }>;
   reviewsToWrite(): Promise<PendingReview[]>;

@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApi, useAuth, useMyRides, useNav, type Route } from '../providers';
 import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
-import { canHost } from '../lib/types';
+import { canHost, type Gender } from '../lib/types';
+import { Avatar } from './Avatar';
 import { requestsWaiting } from '../lib/trips';
 
 const TABS: { route: Route; label: string }[] = [
@@ -29,6 +30,16 @@ export function AppHeader() {
     if (!menuOpen || !session) return;
     api.getDriverVerification().then((v) => setNeedsVerification(!canHost(v))).catch(() => {});
   }, [menuOpen, api, session]);
+  // Your profile photo for the account button; initials until it loads or if you have none.
+  const [photo, setPhoto] = useState<{ avatarUrl: string | null; gender: Gender | null } | null>(null);
+  useEffect(() => {
+    if (!session) return setPhoto(null);
+    let alive = true;
+    api.myPhoto().then((p) => alive && setPhoto(p)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [api, session?.userId, nav.current]);
   const go = (route: Route, params?: Record<string, string>) => {
     setMenuOpen(false);
     nav.push(route, params);
@@ -123,7 +134,11 @@ export function AppHeader() {
             justifyContent: 'center',
           }}
         >
-          <Text style={{ color: t.headerInk, fontWeight: '800' }}>{(first[0] || '?').toUpperCase()}</Text>
+          {photo?.avatarUrl ? (
+            <Avatar uri={photo.avatarUrl} name={session?.name || ''} gender={photo.gender} size={34} />
+          ) : (
+            <Text style={{ color: t.headerInk, fontWeight: '800' }}>{(first[0] || '?').toUpperCase()}</Text>
+          )}
         </Pressable>
         </View>
       </View>
@@ -163,9 +178,13 @@ export function AppHeader() {
             accessibilityLabel="View your profile"
             style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: pressed ? t.chip : 'transparent' })}
           >
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: t.header, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: t.headerInk, fontWeight: '900', fontSize: 16 }}>{(first[0] || '?').toUpperCase()}</Text>
-            </View>
+            {photo?.avatarUrl ? (
+              <Avatar uri={photo.avatarUrl} name={session?.name || ''} gender={photo.gender} size={40} />
+            ) : (
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: t.header, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ color: t.headerInk, fontWeight: '900', fontSize: 16 }}>{(first[0] || '?').toUpperCase()}</Text>
+              </View>
+            )}
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text numberOfLines={1} style={{ color: t.ink, fontWeight: '800', fontSize: 15 }}>{session?.name || 'Your profile'}</Text>
               <Text numberOfLines={1} style={{ color: t.muted, fontSize: 12 }}>{session?.email}</Text>
