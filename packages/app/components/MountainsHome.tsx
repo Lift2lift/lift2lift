@@ -114,7 +114,7 @@ function Rail({ title, note, stats, metric, onOpen }: { title: string; note: str
         <Text style={{ color: t.muted, fontSize: 13 }}>{note}</Text>
       </View>
       {/* Bleeds to the screen edge so the row reads as swipeable. */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={{ gap: 10, paddingHorizontal: 16 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={{ gap: 10, paddingHorizontal: 16, flexGrow: 1, justifyContent: 'center' }}>
         {stats.map((s, i) => {
           const m = metric(s);
           return <Tile key={s.resort.id} stat={s} rank={i + 1} metric={m.value} sub={m.sub} onPress={() => onOpen(s.resort.id)} />;

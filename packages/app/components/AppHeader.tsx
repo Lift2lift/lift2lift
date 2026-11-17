@@ -54,11 +54,14 @@ export function AppHeader() {
           gap: 12,
         }}
       >
-        <Pressable onPress={() => nav.replace('/')} accessibilityRole="link" accessibilityLabel="Lift2Lift home">
-          <Text style={{ color: t.headerInk, fontSize: compact ? 24 : 28, fontWeight: '900', fontStyle: 'italic', letterSpacing: 1 }}>
-            LIFT<Text style={{ color: t.accent }}>2</Text>LIFT
-          </Text>
-        </Pressable>
+        {/* Logo and the right-hand buttons share the spare width equally, so the tabs sit centered. */}
+        <View style={{ flex: 1, flexDirection: 'row' }}>
+          <Pressable onPress={() => nav.replace('/')} accessibilityRole="link" accessibilityLabel="Lift2Lift home">
+            <Text style={{ color: t.headerInk, fontSize: compact ? 24 : 28, fontWeight: '900', fontStyle: 'italic', letterSpacing: 1 }}>
+              LIFT<Text style={{ color: t.accent }}>2</Text>LIFT
+            </Text>
+          </Pressable>
+        </View>
 
         {compact ? null : (
         <View style={{ flexDirection: 'row', gap: 4, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 4 }}>
@@ -89,8 +92,7 @@ export function AppHeader() {
         </View>
         )}
 
-        <View style={{ flex: 1 }} />
-
+        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
         {compact ? null : (
         <Pressable
           onPress={() => nav.push('/post')}
@@ -123,6 +125,7 @@ export function AppHeader() {
         >
           <Text style={{ color: t.headerInk, fontWeight: '800' }}>{(first[0] || '?').toUpperCase()}</Text>
         </Pressable>
+        </View>
       </View>
 
       {/* Floats over the page (no layout shift). Tap outside to close. */}
