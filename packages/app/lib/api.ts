@@ -480,6 +480,16 @@ export function createApi(supabase: SupabaseClient): Api {
       return rows.map((p) => toFriend(p, urls));
     },
 
+    async myPhoto() {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (!uid) return { avatarUrl: null, gender: null };
+      const { data: p } = check(await supabase.from('profiles').select('avatar_path, gender').eq('id', uid).maybeSingle());
+      const row = p as { avatar_path: string | null; gender: Gender | null } | null;
+      const urls = await signAvatars([row?.avatar_path]);
+      return { avatarUrl: row?.avatar_path ? urls[row.avatar_path] ?? null : null, gender: row?.gender ?? null };
+    },
+
     async getProfile(userId) {
       const { data } = check(await supabase.rpc('profile_page', { p_user_id: userId }));
       const p = data as ProfileRow | null;
