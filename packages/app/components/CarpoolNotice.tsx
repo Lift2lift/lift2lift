@@ -10,14 +10,14 @@ import { Brand, Button } from './ui';
  * Bump the version when CARPOOL_DISCLAIMER's wording changes, so everyone is
  * asked to acknowledge the new text.
  */
-const ACK_KEY = 'lift2lift.carpoolNoticeAck.v1';
+export const ACK_KEY = 'lift2lift.carpoolNoticeAck.v1';
 
 /**
  * Colorado carpool notice (C.R.S. 43-1-127), shown the first time the app is
- * opened on a device, right after the opening screen. (Riders also acknowledge
- * it again before each booking, in RideCard.) It can't be dismissed: the person has to tick the box
+ * opened on a device, right after the opening screen. It can't be dismissed: the person has to tick the box
  * and tap "I acknowledge" before using Lift2Lift. The acknowledgement is saved
- * on the device, so it doesn't come back on later launches.
+ * on the device, so it doesn't come back on later launches, and booking a seat
+ * (RideCard) only asks again if this device has no acknowledgement saved.
  */
 export function CarpoolNoticeGate() {
   const t = useTheme();

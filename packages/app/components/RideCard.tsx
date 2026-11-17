@@ -10,7 +10,8 @@ import { PersonChip } from './People';
 import { RatingBadge } from './Stars';
 import { useTheme } from '../lib/theme';
 import type { BoardRide, Forecast, Leg, SeatLegs } from '../lib/types';
-import { useApi, useAuth, useMyRides, useNav } from '../providers';
+import { useApi, useAuth, useDevice, useMyRides, useNav } from '../providers';
+import { ACK_KEY } from './CarpoolNotice';
 import { Button, Card, TextLink } from './ui';
 
 export function RideCard({
@@ -43,6 +44,7 @@ export function RideCard({
   const nav = useNav();
   const { refresh: refreshMyRides } = useMyRides();
   const { session } = useAuth();
+  const device = useDevice();
   const me = session?.userId;
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -72,12 +74,18 @@ export function RideCard({
   const firstName = ride.driverName.split(' ')[0] || 'the driver';
   const friendsRiding = friendIds ? ride.riderIds.filter((id) => friendIds.has(id)).length : 0;
   // Booking: pick legs (round trips), confirm one way if it's one way, then acknowledge
-  // Colorado's carpool notice (C.R.S. 43-1-127(1)(c)) before the seat is claimed. Every booking.
+  // Colorado's carpool notice (C.R.S. 43-1-127(1)(c)) before the seat is claimed, unless
+  // this device already has the acknowledgement saved (CarpoolNoticeGate or an earlier booking).
   // Booking sends the driver a request; the seat is held until they confirm or deny it.
   const [sheet, setSheet] = useState<null | 'legs' | { oneWay: SeatLegs; leg: Leg } | { notice: SeatLegs }>(null);
-  const book = (l: SeatLegs) => setSheet({ notice: l });
+  const book = async (l: SeatLegs) => {
+    const acked = await device.getPref(ACK_KEY).catch(() => null);
+    if (acked) acknowledgeAndBook(l);
+    else setSheet({ notice: l });
+  };
   const acknowledgeAndBook = (l: SeatLegs) => {
     setSheet(null);
+    device.setPref(ACK_KEY, new Date().toISOString()).catch(() => {});
     run(() => api.claimSeat(ride.id, l, true), `Request sent. ${firstName} gets a notification to confirm or deny it, and you'll hear back as soon as they answer.`);
   };
   const bookingLine = (l: SeatLegs) => {
