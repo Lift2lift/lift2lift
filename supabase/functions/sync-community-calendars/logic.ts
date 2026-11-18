@@ -20,8 +20,9 @@ const DENVER = 'America/Denver';
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 const MAX_EVENTS = 500;
-const MAX_STEPS = 5000; // per series
-const MAX_CANDIDATES = 20_000; // across the whole feed
+const MAX_STEPS = 400_000; // iterator calls per series (the time budget is the real backstop)
+const MAX_CANDIDATES = 20_000; // in-window occurrences across the whole feed
+const DEFAULT_BUDGET_MS = 1500;
 
 // ---------------------------------------------------------------- links
 
@@ -161,7 +162,25 @@ const instant = (i: Info) => (i.isDate ? denverMidnight(i.date) : wallToUtc(i.wa
 /** Identity of an occurrence for EXDATE and RECURRENCE-ID matching. */
 const occurrenceId = (i: Info) => (i.isDate ? `D:${i.date}` : `T:${instant(i)}`);
 
-export function eventsFromIcs(ics: string, now: Date, resorts: Resort[]): SyncEvent[] {
+const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** True when the BYMONTH/BYMONTHDAY parts can never match (e.g. Feb 30), which would make ical.js spin. */
+function impossibleRule(rrule: any): boolean {
+  const comp = (name: string): number[] => {
+    const v = rrule.getComponent(name);
+    return (Array.isArray(v) ? v : []).map(Number).filter((n) => Number.isFinite(n));
+  };
+  const days = comp('BYMONTHDAY');
+  if (!days.length) return false;
+  const months = comp('BYMONTH');
+  const max = Math.max(...(months.length ? months : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).map((m) => MONTH_DAYS[m - 1] ?? 31));
+  return days.every((d) => d === 0 || Math.abs(d) > max);
+}
+
+/** `budgetMs` is a work budget (a duration, not a date): when it runs out, expansion stops and what was found so far is returned. */
+export function eventsFromIcs(ics: string, now: Date, resorts: Resort[], budgetMs = DEFAULT_BUDGET_MS): SyncEvent[] {
+  const deadline = Date.now() + budgetMs;
+  const outOfTime = () => Date.now() > deadline;
   let root: any;
   try {
     const jcal = ICAL.parse(ics);
@@ -239,7 +258,7 @@ export function eventsFromIcs(ics: string, now: Date, resorts: Resort[]): SyncEv
     };
 
     for (const ve of masters) {
-      if (candidates.length >= MAX_CANDIDATES) break;
+      if (candidates.length >= MAX_CANDIDATES || outOfTime()) break;
       try {
         const uid = ve.getFirstPropertyValue('uid') as string;
         const mine = overrides.get(uid);
@@ -250,10 +269,11 @@ export function eventsFromIcs(ics: string, now: Date, resorts: Resort[]): SyncEv
         const rrule = ve.getFirstPropertyValue('rrule');
         if (!rrule) {
           if (cancelled(ve)) continue;
-          candidates.push(build(ve, uid, keyOf(start), start, span, durationMs));
+          const single = build(ve, uid, keyOf(start), start, span, durationMs);
+          if (single.endMs > windowStart && single.startMs < windowEnd) candidates.push(single);
           continue;
         }
-        if (cancelled(ve)) continue;
+        if (cancelled(ve) || impossibleRule(rrule)) continue;
 
         const excluded = new Set<string>();
         for (const p of ve.getAllProperties('exdate')) {
@@ -261,7 +281,9 @@ export function eventsFromIcs(ics: string, now: Date, resorts: Resort[]): SyncEv
         }
         const floating = ICAL.Time.fromData({ year: start.wall.y, month: start.wall.mo, day: start.wall.d, hour: start.wall.h, minute: start.wall.mi, second: start.wall.s, isDate: start.isDate });
         const it = rrule.iterator(floating);
-        for (let step = 0; step < MAX_STEPS && candidates.length < MAX_CANDIDATES; step++) {
+        let inWindow = 0;
+        for (let step = 0; step < MAX_STEPS && candidates.length < MAX_CANDIDATES && inWindow < MAX_EVENTS; step++) {
+          if (outOfTime()) break;
           const next = it.next();
           if (!next) break;
           const occ: Info = {
@@ -273,7 +295,10 @@ export function eventsFromIcs(ics: string, now: Date, resorts: Resort[]): SyncEv
           if (instant(occ) > windowEnd) break;
           const id = occurrenceId(occ);
           if (excluded.has(id) || mine?.has(id)) continue;
-          candidates.push(build(ve, uid, keyOf(occ), occ, span, durationMs));
+          const c = build(ve, uid, keyOf(occ), occ, span, durationMs);
+          if (c.endMs <= windowStart) continue; // long-gone occurrences cost time, not cap
+          candidates.push(c);
+          inWindow++;
         }
       } catch {
         // one bad event never stops the rest

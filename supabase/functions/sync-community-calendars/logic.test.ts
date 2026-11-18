@@ -262,13 +262,57 @@ test('all-day recurring keeps its span', () => {
 });
 test('hostile RRULE terminates and is capped', () => {
   const t0 = Date.now();
-  const out = run(cal(
+  const out = eventsFromIcs(cal(
     ev('UID:h', 'SUMMARY:Boom', 'DTSTART:20261201T150000Z', 'RRULE:FREQ=SECONDLY'),
     ev('UID:h2', 'SUMMARY:Boom2', 'DTSTART:20200101T150000Z', 'RRULE:FREQ=SECONDLY'),
     ev('UID:h3', 'SUMMARY:Boom3', 'DTSTART:20261201T150000Z', 'RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=31'),
-  ));
+  ), NOW, resorts, 500);
   assert.ok(out.length <= 500);
-  assert.ok(Date.now() - t0 < 10000);
+  assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0}ms`);
+});
+test('50 impossible rules are skipped fast; the normal event stays', () => {
+  const evs = [];
+  for (let i = 0; i < 50; i++) evs.push(ev(`UID:i${i}`, 'SUMMARY:Never', 'DTSTART:20200105T150000Z', 'RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30;BYDAY=MO'));
+  evs.push(ev('UID:ok', 'SUMMARY:Normal', 'DTSTART;TZID=America/Denver:20261124T090000'));
+  const t0 = Date.now();
+  const out = run(cal(...evs));
+  assert.deepEqual(out.map((e) => e.uid), ['ok|2026-11-24']);
+  assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0}ms`);
+});
+test('BYMONTH=4,6,9,11 with day 31 is skipped fast', () => {
+  const t0 = Date.now();
+  assert.deepEqual(run(cal(ev('UID:i', 'SUMMARY:Never', 'DTSTART:20200105T150000Z', 'RRULE:FREQ=YEARLY;BYMONTH=4,6,9,11;BYMONTHDAY=31'))), []);
+  assert.ok(Date.now() - t0 < 500);
+});
+test('a tiny work budget returns a partial array without throwing', () => {
+  const evs = [];
+  for (let i = 0; i < 5; i++) evs.push(ev(`UID:b${i}`, 'SUMMARY:Heavy', 'DTSTART:20200101T150000Z', 'RRULE:FREQ=SECONDLY'));
+  const out = eventsFromIcs(cal(...evs), NOW, resorts, 1);
+  assert.ok(Array.isArray(out));
+});
+test('long-running series do not starve later ones', () => {
+  const evs = [];
+  for (let i = 0; i < 41; i++) evs.push(ev(`UID:old${i}`, 'SUMMARY:Old', 'DTSTART;TZID=America/Denver:20160104T090000', 'RRULE:FREQ=WEEKLY'));
+  evs.push(ev('UID:cur', 'SUMMARY:Current', 'DTSTART;TZID=America/Denver:20261119T090000', 'RRULE:FREQ=WEEKLY'));
+  const out = run(cal(...evs));
+  assert.ok(out.length <= 500);
+  assert.ok(out.some((e) => e.uid === 'cur|2026-11-19'));
+  assert.ok(out.some((e) => e.uid === 'cur|2026-12-03'));
+});
+test('daily series since 2010 yields exactly the window days', () => {
+  const out = run(cal(ev('UID:d', 'SUMMARY:Daily', 'DTSTART;TZID=America/Denver:20100101T090000', 'RRULE:FREQ=DAILY')));
+  assert.equal(out.length, 181);
+  assert.equal(out[0].uid, 'd|2026-11-16');
+  assert.equal(out[180].uid, 'd|2027-05-15');
+});
+test('weekdays since 2007 yields in-window occurrences', () => {
+  const out = run(cal(ev('UID:w', 'SUMMARY:Weekdays', 'DTSTART;TZID=America/Denver:20070102T090000', 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')));
+  assert.equal(out[0].uid, 'w|2026-11-16');
+  assert.equal(out.at(-1)!.uid, 'w|2027-05-14');
+  assert.equal(out.length, 130);
+});
+test('COUNT counts from the true DTSTART', () => {
+  assert.deepEqual(run(cal(ev('UID:c', 'SUMMARY:Old', 'DTSTART;TZID=America/Denver:20150105T090000', 'RRULE:FREQ=WEEKLY;COUNT=3'))), []);
 });
 
 // ---------- window, status, text ----------
