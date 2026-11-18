@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { addDays, clockFromHHMM, isoDay, parseDay, toISO } from '../lib/dates';
+import { addDays, clockFromHHMM, denverDay, denverMidnight, isoDay, parseDay, toISO } from '../lib/dates';
 import { RESORTS } from '../lib/resorts';
 import { useTheme } from '../lib/theme';
 import type { CommunityEvent, NewCommunityEvent } from '../lib/types';
@@ -23,6 +23,9 @@ function twoHoursAfter(day: string, hhmm: string) {
   const rest = mins % (24 * 60);
   return { day: next, time: `${pad(Math.floor(rest / 60))}:${pad(rest % 60)}` };
 }
+
+/** The form's day for a stored time: all-day events are Denver calendar dates, timed ones device-local. */
+const dayOf = (iso: string, allDay: boolean) => (allDay ? denverDay(iso) : isoDay(new Date(iso)));
 
 /** Every half hour of the day. */
 const TIMES = Array.from({ length: 48 }, (_, i) => `${pad(Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
@@ -69,9 +72,9 @@ export function EventForm({
     if (initial) {
       setTitle(initial.title);
       setAllDay(initial.allDay);
-      setStartDay(isoDay(new Date(initial.startsAt)));
+      setStartDay(dayOf(initial.startsAt, initial.allDay));
       setStartTime(hhmmOf(initial.startsAt));
-      setEndDay(isoDay(new Date(initial.endsAt)));
+      setEndDay(dayOf(initial.endsAt, initial.allDay));
       setEndTime(hhmmOf(initial.endsAt));
       setPlace(initial.location);
       setResortId(initial.resortId ?? '');
@@ -92,8 +95,8 @@ export function EventForm({
   }, [visible]);
 
   const today = isoDay(new Date());
-  const initialStart = initial ? isoDay(new Date(initial.startsAt)) : null;
-  const initialEnd = initial ? isoDay(new Date(initial.endsAt)) : null;
+  const initialStart = initial ? dayOf(initial.startsAt, initial.allDay) : null;
+  const initialEnd = initial ? dayOf(initial.endsAt, initial.allDay) : null;
   const latest = isoDay(addDays(parseDay(today), 180));
   const minDay = initialStart && initialStart < today ? initialStart : today;
   const maxDay = initialEnd && initialEnd > latest ? initialEnd : latest;
@@ -107,7 +110,7 @@ export function EventForm({
     setStartTime(time);
     if (!endTouched) {
       const end = twoHoursAfter(day, time);
-      setEndDay(end.day);
+      setEndDay(allDay ? day : end.day);
       setEndTime(end.time);
     } else if (endDay < day) setEndDay(day);
   }
@@ -115,8 +118,9 @@ export function EventForm({
   async function save() {
     if (savingRef.current) return;
     if (title.trim().length < 2) return setError('Give the event a name.');
-    const startsAt = toISO(startDay, allDay ? '00:00' : startTime);
-    const endsAt = toISO(endDay, allDay ? '00:00' : endTime);
+    // All-day events are stored at Denver midnight of the first and last day, whatever the device's zone.
+    const startsAt = allDay ? denverMidnight(startDay) : toISO(startDay, startTime);
+    const endsAt = allDay ? denverMidnight(endDay) : toISO(endDay, endTime);
     if (new Date(endsAt) < new Date(startsAt)) return setError('The end has to be after the start.');
     setError(null);
     savingRef.current = true;
@@ -147,7 +151,15 @@ export function EventForm({
 
         <ChipRow wrap>
           <Chip label="Set times" selected={!allDay} onPress={() => setAllDay(false)} />
-          <Chip label="All day" selected={allDay} onPress={() => setAllDay(true)} />
+          <Chip
+            label="All day"
+            selected={allDay}
+            onPress={() => {
+              setAllDay(true);
+              // An untouched end may have rolled past midnight; an all-day event then ends on its first day.
+              if (!endTouched) setEndDay(startDay);
+            }}
+          />
         </ChipRow>
 
         <View style={{ gap: 8 }}>

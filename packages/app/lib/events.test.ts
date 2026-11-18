@@ -6,7 +6,9 @@ import {
   dayMarks,
   daysAway,
   eventDays,
+  eventIsOver,
   eventOn,
+  eventsOn,
   initialDay,
   isMultiDay,
   kicker,
@@ -15,6 +17,7 @@ import {
   nextEvent,
   ridesForEvent,
 } from './events.ts';
+import { denverDay, denverMidnight } from './dates.ts';
 
 const iso = (y: number, m: number, d: number, h = 0, mi = 0) => new Date(y, m - 1, d, h, mi).toISOString();
 
@@ -52,10 +55,48 @@ const ride = (o: Partial<BoardRide> = {}): BoardRide =>
 test('eventDays: timed single day', () => assert.deepEqual(eventDays(ev()), ['2026-12-05']));
 test('eventDays: Dec 4 4 PM to Dec 6 2 PM is three days', () =>
   assert.deepEqual(eventDays(ev({ startsAt: iso(2026, 12, 4, 16), endsAt: iso(2026, 12, 6, 14) })), ['2026-12-04', '2026-12-05', '2026-12-06']));
+// All-day events are stored at Denver midnight of their first and last day (see F1); these hold in any TZ.
+const dm = denverMidnight;
 test('eventDays: all-day single day does not spill', () =>
-  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: iso(2026, 12, 5), endsAt: iso(2026, 12, 5) })), ['2026-12-05']));
+  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: dm('2026-12-05'), endsAt: dm('2026-12-05') })), ['2026-12-05']));
 test('eventDays: all-day multi day ends on last day', () =>
-  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: iso(2026, 12, 5), endsAt: iso(2026, 12, 6) })), ['2026-12-05', '2026-12-06']));
+  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: dm('2026-12-05'), endsAt: dm('2026-12-06') })), ['2026-12-05', '2026-12-06']));
+test('eventDays: all-day at Denver midnight Dec 5 is Dec 5 in any device zone', () =>
+  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: '2026-12-05T07:00:00.000Z', endsAt: '2026-12-05T07:00:00.000Z' })), ['2026-12-05']));
+test('eventDays: three-day all-day event', () =>
+  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: dm('2026-12-05'), endsAt: dm('2026-12-07') })), ['2026-12-05', '2026-12-06', '2026-12-07']));
+test('eventDays: all-day across the DST change keeps its Denver dates', () =>
+  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: dm('2026-10-31'), endsAt: dm('2026-11-02') })), ['2026-10-31', '2026-11-01', '2026-11-02']));
+test('eventDays: unparseable dates give no days (and do not hang)', () => {
+  assert.deepEqual(eventDays(ev({ startsAt: 'not a date', endsAt: iso(2026, 12, 5, 17) })), []);
+  assert.deepEqual(eventDays(ev({ allDay: true, startsAt: iso(2026, 12, 5), endsAt: 'nope' })), []);
+  assert.equal(eventOn([ev({ startsAt: 'x', endsAt: 'y' })], '2026-12-05'), null);
+});
+
+test('denverMidnight: Denver wall-clock midnight, DST-correct, round-trips', () => {
+  assert.equal(denverMidnight('2026-12-05'), '2026-12-05T07:00:00.000Z'); // MST
+  assert.equal(denverMidnight('2026-07-04'), '2026-07-04T06:00:00.000Z'); // MDT
+  assert.equal(denverMidnight('2027-03-14'), '2027-03-14T07:00:00.000Z'); // spring forward at 2 am, midnight is still MST
+  assert.equal(denverMidnight('2027-03-15'), '2027-03-15T06:00:00.000Z');
+  assert.equal(denverMidnight('2026-11-01'), '2026-11-01T06:00:00.000Z'); // fall back at 2 am, midnight is still MDT
+  assert.equal(denverMidnight('2026-11-02'), '2026-11-02T07:00:00.000Z');
+  for (const day of ['2027-03-13', '2027-03-14', '2027-03-15', '2026-10-31', '2026-11-01', '2026-11-02', '2026-12-31', '2027-01-01'])
+    assert.equal(denverDay(denverMidnight(day)), day);
+});
+test('denverDay: late evening in Denver is still that day', () => {
+  assert.equal(denverDay('2026-12-06T06:59:00.000Z'), '2026-12-05');
+  assert.equal(denverDay('2026-12-06T07:00:00.000Z'), '2026-12-06');
+  assert.equal(denverDay('bad'), '');
+});
+
+test('eventIsOver: timed at its end, all-day at the end of its last Denver day', () => {
+  const timed = ev({ startsAt: '2026-12-05T16:00:00.000Z', endsAt: '2026-12-05T18:00:00.000Z' });
+  assert.equal(eventIsOver(timed, new Date('2026-12-05T17:00:00.000Z')), false);
+  assert.equal(eventIsOver(timed, new Date('2026-12-05T18:00:01.000Z')), true);
+  const allDay = ev({ allDay: true, startsAt: dm('2026-12-05'), endsAt: dm('2026-12-06') });
+  assert.equal(eventIsOver(allDay, new Date('2026-12-07T06:59:59.000Z')), false); // 11:59 pm Dec 6 in Denver
+  assert.equal(eventIsOver(allDay, new Date('2026-12-07T07:00:00.000Z')), true);
+});
 test('eventDays: timed event ending at midnight skips that day', () =>
   assert.deepEqual(eventDays(ev({ startsAt: iso(2026, 12, 4, 20), endsAt: iso(2026, 12, 6) })), ['2026-12-04', '2026-12-05']));
 test('eventDays: zero-length timed event at midnight keeps its day', () =>
@@ -129,6 +170,31 @@ test('multi-day across months: start, middle, end, eventOn', () => {
   assert.equal(dec['2026-12-02'].event?.id, e.id);
   assert.equal(eventOn([e], '2026-12-01')?.id, e.id);
   assert.equal(eventOn([e], '2026-12-03'), null);
+});
+
+test('eventsOn: two events on one day, by start', () => {
+  const a = ev({ startsAt: iso(2026, 12, 5, 14), endsAt: iso(2026, 12, 5, 16) });
+  const b = ev({ startsAt: iso(2026, 12, 5, 8), endsAt: iso(2026, 12, 5, 10) });
+  assert.deepEqual(eventsOn([a, b], '2026-12-05').map((e) => e.id), [b.id, a.id]);
+  assert.deepEqual(eventsOn([a, b], '2026-12-06'), []);
+});
+test('eventsOn: single-day event comes before a multi-day span passing through', () => {
+  const span = ev({ startsAt: iso(2026, 12, 4, 9), endsAt: iso(2026, 12, 7, 17) });
+  const single = ev({ startsAt: iso(2026, 12, 5, 18), endsAt: iso(2026, 12, 5, 20) });
+  assert.deepEqual(eventsOn([span, single], '2026-12-05').map((e) => e.id), [single.id, span.id]);
+  assert.equal(eventOn([span, single], '2026-12-05')?.id, single.id);
+  assert.deepEqual(eventsOn([span, single], '2026-12-04').map((e) => e.id), [span.id]);
+  // The bar stays continuous and the single-day event still shows as a dot.
+  const m = dayMarks(new Date(2026, 11, 1), [span, single], []);
+  assert.equal(m['2026-12-05'].span, 'middle');
+  assert.equal(m['2026-12-05'].single, true);
+  assert.equal(m['2026-12-05'].event?.id, single.id);
+  assert.equal(m['2026-12-06'].single, false);
+});
+test('eventsOn: a multi-day event starting that day comes before one passing through', () => {
+  const longer = ev({ startsAt: iso(2026, 12, 1, 9), endsAt: iso(2026, 12, 20, 17), allDay: false });
+  const trip = ev({ startsAt: iso(2026, 12, 5, 9), endsAt: iso(2026, 12, 6, 17) });
+  assert.deepEqual(eventsOn([longer, trip], '2026-12-05').map((e) => e.id), [trip.id, longer.id]);
 });
 
 test('single-day span and eventOn earliest start wins', () => {
