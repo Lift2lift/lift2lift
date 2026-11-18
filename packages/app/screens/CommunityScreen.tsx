@@ -199,7 +199,7 @@ export function CommunityScreen({ communityId, welcome }: { communityId?: string
         )}
       </View>
 
-      <CommunityMembers page={page} me={me} onChanged={load} onMessage={(text, kind) => setMessage({ text, kind })} />
+      <CommunityMembers page={page} me={me} onChanged={load} onMessage={(text, kind) => setMessage(text === null ? null : { text, kind: kind ?? 'success' })} />
     </FormScreen>
   );
 }

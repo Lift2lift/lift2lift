@@ -22,7 +22,8 @@ export function CommunityMembers({
   me: string | undefined;
   /** Reload the page. */
   onChanged: () => Promise<void>;
-  onMessage: (text: string, kind: 'success' | 'error') => void;
+  /** `null` clears the banner. */
+  onMessage: (text: string | null, kind?: 'success' | 'error') => void;
   /** Extra admin cards, shown in the Admin section above the buttons. */
   children?: ReactNode;
 }) {
@@ -39,6 +40,7 @@ export function CommunityMembers({
 
   async function run(fn: () => Promise<void>, done?: string) {
     setBusy(true);
+    onMessage(null);
     try {
       await fn();
       if (done) onMessage(done, 'success');

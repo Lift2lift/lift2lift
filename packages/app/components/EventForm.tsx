@@ -15,6 +15,15 @@ const hhmmOf = (iso: string) => {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
+/** Two hours after a start: the end day and HH:MM, rolling into the next day past midnight. */
+function twoHoursAfter(day: string, hhmm: string) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const mins = h * 60 + m + 120;
+  const next = mins >= 24 * 60 ? isoDay(addDays(parseDay(day), 1)) : day;
+  const rest = mins % (24 * 60);
+  return { day: next, time: `${pad(Math.floor(rest / 60))}:${pad(rest % 60)}` };
+}
+
 /** Every half hour of the day. */
 const TIMES = Array.from({ length: 48 }, (_, i) => `${pad(Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
 
@@ -47,6 +56,8 @@ export function EventForm({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  // Until the end is touched (or when editing), it follows the start + 2 hours.
+  const [endTouched, setEndTouched] = useState(false);
 
   // Start fresh each time the sheet opens.
   useEffect(() => {
@@ -54,6 +65,7 @@ export function EventForm({
     setError(null);
     setSaving(false);
     savingRef.current = false;
+    setEndTouched(!!initial);
     if (initial) {
       setTitle(initial.title);
       setAllDay(initial.allDay);
@@ -67,10 +79,11 @@ export function EventForm({
     } else {
       setTitle('');
       setAllDay(false);
+      const end = twoHoursAfter(defaultDay, '09:00');
       setStartDay(defaultDay);
       setStartTime('09:00');
-      setEndDay(defaultDay);
-      setEndTime('11:00');
+      setEndDay(end.day);
+      setEndTime(end.time);
       setPlace('');
       setResortId('');
       setDescription('');
@@ -89,9 +102,14 @@ export function EventForm({
   const startTimes = TIMES.includes(startTime) ? TIMES : [...TIMES, startTime].sort();
   const endTimes = TIMES.includes(endTime) ? TIMES : [...TIMES, endTime].sort();
 
-  function pickStartDay(d: string) {
-    setStartDay(d);
-    if (endDay < d) setEndDay(d);
+  function changeStart(day: string, time: string) {
+    setStartDay(day);
+    setStartTime(time);
+    if (!endTouched) {
+      const end = twoHoursAfter(day, time);
+      setEndDay(end.day);
+      setEndTime(end.time);
+    } else if (endDay < day) setEndDay(day);
   }
 
   async function save() {
@@ -135,12 +153,12 @@ export function EventForm({
         <View style={{ gap: 8 }}>
           <Label>{allDay ? 'First day' : 'Starts'}</Label>
           <View style={{ flexDirection: 'row' }}>
-            <DayPicker value={startDay} onChange={pickStartDay} minDay={minDay} maxDay={maxDay} label="Starts" />
+            <DayPicker value={startDay} onChange={(d) => changeStart(d, startTime)} minDay={minDay} maxDay={maxDay} label="Starts" />
           </View>
           {allDay ? null : (
             <ChipRow>
               {startTimes.map((tm) => (
-                <Chip key={tm} label={clockFromHHMM(tm)} selected={startTime === tm} onPress={() => setStartTime(tm)} />
+                <Chip key={tm} label={clockFromHHMM(tm)} selected={startTime === tm} onPress={() => changeStart(startDay, tm)} />
               ))}
             </ChipRow>
           )}
@@ -149,12 +167,12 @@ export function EventForm({
         <View style={{ gap: 8 }}>
           <Label>{allDay ? 'Last day' : 'Ends'}</Label>
           <View style={{ flexDirection: 'row' }}>
-            <DayPicker value={endDay} onChange={setEndDay} minDay={startDay} maxDay={maxDay} label="Ends" />
+            <DayPicker value={endDay} onChange={(d) => { setEndTouched(true); setEndDay(d); }} minDay={startDay} maxDay={maxDay} label="Ends" />
           </View>
           {allDay ? null : (
             <ChipRow>
               {endTimes.map((tm) => (
-                <Chip key={tm} label={clockFromHHMM(tm)} selected={endTime === tm} onPress={() => setEndTime(tm)} />
+                <Chip key={tm} label={clockFromHHMM(tm)} selected={endTime === tm} onPress={() => { setEndTouched(true); setEndTime(tm); }} />
               ))}
             </ChipRow>
           )}
