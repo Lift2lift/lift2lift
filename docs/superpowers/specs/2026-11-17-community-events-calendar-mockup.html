@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Community page with events calendar</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#2C6BDE}a:hover{color:#1F4FA8}
+button{font-family:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 780px; background: #EEF3F7; color: #13213A; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif">
+
+<header style="background: #13213A">
+<div style="max-width: 960px; margin: 0 auto; padding: 10px 16px; box-sizing: border-box; display: flex; align-items: center; flex-wrap: wrap; gap: 12px">
+<div style="flex: 1 1 0; min-width: 130px">
+<span style="color: #EEF3F7; font-size: 28px; font-weight: 900; font-style: italic; letter-spacing: 1px">LIFT<span style="color: #F5B800">2</span>LIFT</span>
+</div>
+<nav aria-label="Main" style="display: flex; gap: 4px; background: rgba(255,255,255,0.08); border-radius: 12px; padding: 4px">
+<a href="#" style="padding: 6px 14px; border-radius: 9px; color: #EEF3F7; font-weight: 700; font-size: 14px; text-decoration: none">Mountains</a>
+<a href="#" style="padding: 6px 14px; border-radius: 9px; color: #EEF3F7; font-weight: 700; font-size: 14px; text-decoration: none">Rides</a>
+<a href="#" aria-current="page" style="padding: 6px 14px; border-radius: 9px; background: #EEF3F7; color: #13213A; font-weight: 700; font-size: 14px; text-decoration: none">Communities</a>
+<a href="#" style="padding: 6px 14px; border-radius: 9px; color: #EEF3F7; font-weight: 700; font-size: 14px; text-decoration: none">Snow</a>
+</nav>
+<div style="flex: 1 1 0; min-width: 130px; display: flex; justify-content: flex-end; align-items: center; gap: 12px">
+<button type="button" style="background: #F5B800; color: #13213A; border: 0; border-radius: 10px; padding: 8px 14px; font-weight: 800; font-size: 14px">+ Post a ride</button>
+<button type="button" aria-label="Account menu" style="width: 34px; height: 34px; border-radius: 17px; border: 0; background: rgba(255,255,255,0.14); color: #EEF3F7; font-weight: 800; font-size: 14px">J</button>
+</div>
+</div>
+</header>
+
+<main style="max-width: 960px; margin: 0 auto; padding: 24px 16px 40px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+
+<a href="#" style="align-self: flex-start; font-size: 15px; font-weight: 700; text-decoration: none">‹ Communities</a>
+
+<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 14px">
+<div aria-hidden="true" style="width: 56px; height: 56px; border-radius: 16px; background: #2C5BB8; color: #FFFFFF; font-size: 21px; font-weight: 900; display: flex; align-items: center; justify-content: center">CF</div>
+<div style="flex: 1 1 220px; min-width: 0">
+<h1 style="margin: 0; font-size: 28px; font-weight: 900; text-transform: uppercase; line-height: 1.15">CU Freeride</h1>
+<div style="color: #586A82; font-size: 14px">42 members · You're an admin</div>
+</div>
+<div style="display: flex; gap: 8px">
+<button type="button" style="min-height: 44px; background: transparent; border: 1px solid #D3DDE7; border-radius: 10px; padding: 8px 14px; color: #13213A; font-size: 14px; font-weight: 800">Members</button>
+<button type="button" style="min-height: 44px; background: transparent; border: 1px solid #D3DDE7; border-radius: 10px; padding: 8px 14px; color: #13213A; font-size: 14px; font-weight: 800">+ Add event</button>
+</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px">
+
+<section aria-label="Selected day" style="flex: 999 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+
+<sc-if value="{{ hasEvent }}" hint-placeholder-val="{{ true }}">
+<div style="background: #13213A; color: #EEF3F7; border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px">
+<span style="color: #F5B800; font-size: 12px; font-weight: 800; letter-spacing: 0.8px">{{ kicker }}</span>
+<span style="color: #A9B7CA; font-size: 13px; font-weight: 700">{{ dayShort }}</span>
+</div>
+<h2 style="margin: 0; font-size: 30px; font-weight: 900; text-transform: uppercase; line-height: 1.1">{{ evTitle }}</h2>
+<div style="color: #A9B7CA; font-size: 15px; line-height: 1.4">{{ evMeet }}</div>
+<sc-if value="{{ hasPlan }}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 4px">
+<sc-for list="{{ plan }}" as="p" hint-placeholder-count="3">
+<div style="background: rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+<span style="color: #F5B800; font-size: 11px; font-weight: 800; letter-spacing: 1px">{{ p.day }}</span>
+<span style="font-size: 14px; font-weight: 700; line-height: 1.3">{{ p.what }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<div style="display: flex; align-items: center; gap: 10px; padding-left: 8px; margin-top: 2px">
+<span aria-hidden="true" style="display: flex">
+<span style="width: 26px; height: 26px; border-radius: 13px; background: #2C5BB8; border: 2px solid #13213A; margin-left: -8px"></span>
+<span style="width: 26px; height: 26px; border-radius: 13px; background: #0F7A6C; border: 2px solid #13213A; margin-left: -8px"></span>
+<span style="width: 26px; height: 26px; border-radius: 13px; background: #B23A48; border: 2px solid #13213A; margin-left: -8px"></span>
+<span style="width: 26px; height: 26px; border-radius: 13px; background: #6B3FA0; border: 2px solid #13213A; margin-left: -8px"></span>
+</span>
+<span style="font-size: 14px; font-weight: 700">{{ goingText }}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px">
+<button type="button" onClick="{{ toggleIn }}" aria-pressed="{{ amIn }}" style="{{ inStyle }}">{{ inLabel }}</button>
+<sc-if value="{{ hasEventRides }}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{ toggleRides }}" aria-expanded="{{ showRides }}" style="min-height: 44px; background: transparent; border: 1px solid #3A4D70; border-radius: 12px; padding: 10px 18px; color: #EEF3F7; font-size: 15px; font-weight: 800">{{ ridesBtn }}</button>
+</sc-if>
+</div>
+</div>
+
+<sc-if value="{{ showRides }}" hint-placeholder-val="{{ false }}">
+<div style="background: #FFFFFF; border: 1px solid #D3DDE7; border-radius: 14px; padding: 6px 16px">
+<div style="color: #586A82; font-size: 12px; font-weight: 700; letter-spacing: 0.8px; padding: 10px 0 6px">{{ eventRidesLabel }}</div>
+<sc-for list="{{ eventRides }}" as="r" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 0; border-top: 1px dashed #D3DDE7">
+<span style="width: 96px; font-size: 15px; font-weight: 900">{{ r.time }}</span>
+<span style="flex: 1 1 140px; min-width: 0; font-size: 15px"><span style="font-weight: 700">{{ r.who }}</span><span style="color: #586A82"> · {{ r.seats }}</span></span>
+<button type="button" disabled="{{ r.full }}" style="{{ r.btnStyle }}">{{ r.btn }}</button>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{ noEvent }}" hint-placeholder-val="{{ false }}">
+<h2 style="margin: 0; color: #586A82; font-size: 12px; font-weight: 700; letter-spacing: 0.8px">{{ dayLong }}</h2>
+</sc-if>
+
+<sc-if value="{{ hasOthers }}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px">
+<h2 style="margin: 0; font-size: 19px; font-weight: 900">{{ othersTitle }}</h2>
+<span style="color: #586A82; font-size: 13px">{{ othersNote }}</span>
+</div>
+<div style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px">
+<sc-for list="{{ tiles }}" as="t" hint-placeholder-count="2">
+<button type="button" onClick="{{ t.pick }}" aria-pressed="{{ t.on }}" style="{{ t.style }}">
+<span style="display: flex; justify-content: space-between; align-items: center">
+<span style="color: #586A82; font-size: 12px; font-weight: 900">{{ t.rank }}</span>
+<span style="background: #F5B800; border-radius: 999px; padding: 2px 8px; color: #13213A; font-size: 11px; font-weight: 900">{{ t.pill }}</span>
+</span>
+<span style="font-size: 16px; font-weight: 900; text-transform: uppercase; margin-top: 2px">{{ t.name }}</span>
+<span style="color: #586A82; font-size: 11px; font-weight: 700; letter-spacing: 0.4px">{{ t.pass }}</span>
+<span style="flex: 1"></span>
+<span style="font-size: 22px; font-weight: 900">{{ t.metric }}</span>
+<span style="color: #586A82; font-size: 12px">{{ t.sub }}</span>
+</button>
+</sc-for>
+</div>
+<sc-for list="{{ cards }}" as="c" hint-placeholder-count="2">
+<div style="background: #FFFFFF; border: 1px solid #D3DDE7; border-radius: 14px; display: flex; overflow: hidden">
+<div style="width: 72px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2px dashed #D3DDE7; padding: 14px 0">
+<span style="font-size: 24px; font-weight: 900; line-height: 28px">{{ c.t1 }}</span>
+<span style="color: #586A82; font-size: 11px; font-weight: 800; letter-spacing: 1px">{{ c.t2 }}</span>
+</div>
+<div style="flex: 1; min-width: 0; padding: 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+<span style="display: flex; align-items: center; gap: 8px; min-width: 0">
+<span aria-hidden="true" style="{{ c.avStyle }}">{{ c.initial }}</span>
+<span style="font-size: 18px; font-weight: 900">{{ c.who }}</span>
+</span>
+<span style="background: #E3EAF1; border-radius: 6px; padding: 3px 8px; font-size: 13px; font-weight: 800">{{ c.gas }}</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+<span style="border: 1.5px solid #13213A; border-radius: 6px; padding: 2px 7px; font-size: 12px; font-weight: 800">⇅ Round trip</span>
+<span style="background: #13213A; border-radius: 6px; padding: 2px 7px; color: #EEF3F7; font-size: 12px; font-weight: 800">CU Freeride · members only</span>
+</div>
+<div style="color: #586A82; font-size: 14px">Leaves from <span style="color: #13213A; font-weight: 700">{{ c.from }}</span> · {{ c.riders }}</div>
+<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+<span style="display: flex; align-items: center; gap: 4px">
+<sc-for list="{{ c.seatIcons }}" as="s" hint-placeholder-count="4">
+<span aria-hidden="true" style="{{ s.style }}"></span>
+</sc-for>
+<span style="font-size: 13px; font-weight: 700; margin-left: 4px">{{ c.seats }}</span>
+</span>
+<button type="button" style="min-height: 44px; background: #F5B800; border: 1px solid #F5B800; border-radius: 10px; padding: 8px 14px; color: #13213A; font-size: 14px; font-weight: 800">Call shotgun</button>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="border: 2px dashed #D3DDE7; border-radius: 16px; padding: 28px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+<div style="font-size: 18px; font-weight: 900">Nothing on yet</div>
+<div style="color: #586A82; font-size: 15px; line-height: 1.4">Driving up? Post a ride and only CU Freeride members will see it.</div>
+<button type="button" style="min-height: 44px; margin-top: 6px; background: #F5B800; border: 1px solid #F5B800; border-radius: 10px; padding: 8px 14px; color: #13213A; font-size: 14px; font-weight: 800">{{ postLabel }}</button>
+</div>
+</sc-if>
+
+</section>
+
+<section aria-label="Calendar" style="flex: 1 1 340px; max-width: 380px; box-sizing: border-box; background: #FFFFFF; border: 1px solid #D3DDE7; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<button type="button" onClick="{{ prevMonth }}" disabled="{{ noPrev }}" aria-label="Previous month" style="{{ prevStyle }}">‹</button>
+<h2 style="margin: 0; font-size: 16px; font-weight: 900">{{ monthName }}</h2>
+<button type="button" onClick="{{ nextMonth }}" disabled="{{ noNext }}" aria-label="Next month" style="{{ nextStyle }}">›</button>
+</div>
+<div>
+<div aria-hidden="true" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; color: #586A82; font-size: 12px; font-weight: 800; margin-bottom: 4px">
+<span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 4px">
+<sc-for list="{{ cells }}" as="d" hint-placeholder-count="35">
+<sc-if value="{{ d.blank }}" hint-placeholder-val="{{ false }}"><span></span></sc-if>
+<sc-if value="{{ d.day }}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{ d.pick }}" disabled="{{ d.past }}" aria-pressed="{{ d.sel }}" aria-label="{{ d.label }}" style="{{ d.style }}">
+<span style="{{ d.numStyle }}">{{ d.num }}</span>
+<span style="height: 13px; display: flex; align-items: center; gap: 3px">
+<sc-if value="{{ d.oneDay }}" hint-placeholder-val="{{ false }}"><span style="{{ d.barStyle }}"></span></sc-if>
+<sc-if value="{{ d.hasRides }}" hint-placeholder-val="{{ false }}"><span style="min-width: 16px; padding: 0 4px; border-radius: 999px; background: #F5B800; color: #13213A; font-size: 11px; font-weight: 900; line-height: 13px; text-align: center">{{ d.rides }}</span></sc-if>
+</span>
+<sc-if value="{{ d.multi }}" hint-placeholder-val="{{ false }}"><span style="{{ d.spanStyle }}"></span></sc-if>
+</button>
+</sc-if>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 14px; color: #586A82; font-size: 12px">
+<span style="display: flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 14px; height: 5px; border-radius: 3px; background: #13213A"></span>Club event</span>
+<span style="display: flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 30px; height: 5px; border-radius: 3px; background: #13213A"></span>Multi-day</span>
+<span style="display: flex; align-items: center; gap: 6px"><span aria-hidden="true" style="min-width: 16px; padding: 0 4px; border-radius: 999px; background: #F5B800; color: #13213A; font-size: 11px; font-weight: 900; line-height: 13px; text-align: center">2</span>Member rides</span>
+</div>
+</section>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"start":{"editor":"enum","options":["next","cabin"],"default":"next"},"$preview":{"width":1280,"height":1040}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+var cabin = props && props.start === 'cabin';
+this.state = { m: cabin ? 12 : 11, sel: cabin ? 4 : 21, going: {}, open: false, mtn: null };
+}
+renderVals() {
+var self = this;
+var st = this.state;
+var m = st.m;
+var sel = st.sel;
+var MO = { 11: { name: 'November 2026', short: 'Nov', days: 30, off: 0 }, 12: { name: 'December 2026', short: 'Dec', days: 31, off: 2 } };
+var mo = MO[m];
+var DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+var EVS = [
+{ id: 'copper', m: 11, from: 21, to: 21, title: 'Copper dawn patrol', meet: 'Meet 8:30 AM at Center Village · Copper Mountain', going: 18, rides: [['5:45 AM', 'Jonah K.', 1], ['6:15 AM', 'Priya S.', 2], ['7:00 AM', 'Eli T.', 0]] },
+{ id: 'wax', m: 11, from: 24, to: 24, title: 'Wax night', meet: '7:00 PM · Rec Center, room 110', going: 11, rides: [] },
+{ id: 'vail', m: 11, from: 28, to: 28, title: 'Vail opening trip', meet: 'Meet 9:00 AM at Vail Village · Vail', going: 9, rides: [['5:30 AM', 'Jonah K.', 4], ['6:00 AM', 'Ari P.', 1]] },
+{ id: 'cabin', m: 12, from: 4, to: 6, title: 'Cabin weekend', meet: 'Fri 4:00 PM to Sun 2:00 PM · Peak 7 cabin, Breckenridge · 14 of 20 spots taken', going: 14, rides: [['Fri 2:30 PM', 'Jonah K.', 2], ['Fri 4:00 PM', 'Maya R.', 1], ['Sat 7:00 AM', 'Sam W.', 3]], plan: [['FRI', 'Drive up, cabin dinner'], ['SAT', 'Ski Breckenridge'], ['SUN', 'Ski, then drive home']] }
+];
+var OT = {
+'11-20': [['6:30 AM', 'Winter Park', 'Maya R.', 2, 4, 18, 'Williams Village', 'with Eli and Priya']],
+'11-21': [['7:30 AM', 'Eldora', 'Sam W.', 3, 3, 8, 'Farrand Field', 'no riders yet'], ['8:00 AM', 'Eldora', 'Dana L.', 1, 3, 8, 'Kittredge', 'with Ari and Jo'], ['6:30 AM', 'Winter Park', 'Maya R.', 2, 4, 18, 'Williams Village', 'with Eli and Priya']],
+'11-22': [['6:00 AM', 'Breckenridge', 'Maya R.', 2, 4, 24, 'Williams Village', 'with Sam and Jo'], ['6:45 AM', 'Breckenridge', 'Ari P.', 3, 4, 22, 'The Hill', 'with Eli'], ['8:00 AM', 'Eldora', 'Dana L.', 1, 3, 8, 'Kittredge', 'with Ari and Jo']],
+'11-26': [['7:00 AM', 'Loveland', 'Dana L.', 3, 4, 14, 'Kittredge', 'with Priya']]
+};
+var PASS = { 'Eldora': 'IKON', 'Winter Park': 'IKON', 'Breckenridge': 'EPIC', 'Loveland': 'FRONT RANGE' };
+var AV = { 'Maya R.': '#2C5BB8', 'Sam W.': '#0F7A6C', 'Dana L.': '#6B3FA0', 'Ari P.': '#B23A48' };
+var evOn = function (d) {
+return EVS.filter(function (e) { return e.m === m && d >= e.from && d <= e.to; })[0];
+};
+var dowOf = function (d) { return DOW[(mo.off + d - 1) % 7]; };
+var short = function (d) { return dowOf(d).slice(0, 3) + ', ' + mo.short + ' ' + d; };
+var seatText = function (n) { return n === 0 ? 'full' : n + (n === 1 ? ' seat open' : ' seats open'); };
+var ev = evOn(sel);
+
+var cells = [];
+for (var b = 0; b < mo.off; b++) cells.push({ blank: true, day: false });
+for (var i = 1; i <= mo.days; i++) {
+(function (d) {
+var e = evOn(d);
+var multi = !!e && e.to > e.from;
+var inSel = ev ? e === ev : d === sel;
+var past = m === 11 && d < 17;
+var today = m === 11 && d === 17;
+var n = (e && d === e.from ? e.rides.length : 0) + (OT[m + '-' + d] || []).length;
+var radius = !inSel || !multi ? '10px' : d === e.from ? '10px 0 0 10px' : d === e.to ? '0 10px 10px 0' : '0';
+cells.push({
+blank: false,
+day: true,
+num: d,
+sel: inSel,
+past: past,
+oneDay: !!e && !multi,
+multi: multi,
+hasRides: n > 0,
+rides: n,
+label: mo.name.split(' ')[0] + ' ' + d + (e ? ', ' + e.title : '') + (n ? ', ' + n + (n === 1 ? ' ride' : ' rides') : ''),
+pick: function () { self.setState({ sel: d, open: false, mtn: null }); },
+style: 'position: relative; width: 100%; height: 52px; padding: 0 0 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: ' + radius + '; background: ' + (inSel ? '#13213A' : 'transparent') + '; color: ' + (inSel ? '#EEF3F7' : '#13213A') + '; border: ' + (today && !inSel ? '1.5px solid #13213A' : '0') + '; opacity: ' + (past ? '0.3' : '1'),
+numStyle: 'font-size: 15px; font-variant-numeric: tabular-nums; font-weight: ' + (e || n ? '900' : '600'),
+barStyle: 'width: 12px; height: 5px; border-radius: 3px; background: ' + (inSel ? '#EEF3F7' : '#13213A'),
+spanStyle: multi ? 'position: absolute; bottom: 5px; height: 5px; background: ' + (inSel ? '#F5B800' : '#13213A') + '; left: ' + (d === e.from ? '8px' : '0') + '; right: ' + (d === e.to ? '8px' : '0') + '; border-radius: ' + (d === e.from ? '3px 0 0 3px' : d === e.to ? '0 3px 3px 0' : '0') : ''
+});
+})(i);
+}
+
+var evRides = ev ? ev.rides.map(function (r) {
+var full = r[2] === 0;
+return {
+time: r[0], who: r[1], seats: seatText(r[2]), full: full, btn: full ? 'Full' : 'Call shotgun',
+btnStyle: 'min-height: 44px; border-radius: 10px; padding: 8px 14px; font-size: 14px; font-weight: 800; color: #13213A; background: ' + (full ? 'transparent' : '#F5B800') + '; border: 1px solid ' + (full ? '#D3DDE7' : '#F5B800') + '; opacity: ' + (full ? '0.6' : '1')
+};
+}) : [];
+var openRides = evRides.filter(function (r) { return !r.full; }).length;
+var amIn = ev ? !!st.going[ev.id] : false;
+var away = ev ? (m === 11 ? ev.from - 17 : 13 + ev.from) : 0;
+
+var list = OT[m + '-' + sel] || [];
+var groups = [];
+list.forEach(function (r) {
+var g = groups.filter(function (x) { return x.name === r[1]; })[0];
+if (!g) { g = { name: r[1], rides: [], open: 0 }; groups.push(g); }
+g.rides.push(r);
+g.open += r[3];
+});
+groups.sort(function (a, c) { return c.rides.length - a.rides.length; });
+var picked = groups.filter(function (g) { return g.name === st.mtn; })[0] || groups[0];
+var tiles = groups.map(function (g, idx) {
+var on = g === picked;
+return {
+on: on,
+rank: '#' + (idx + 1),
+pill: g.rides.length + (g.rides.length === 1 ? ' ride' : ' rides'),
+name: g.name,
+pass: PASS[g.name] || '',
+metric: '' + g.open,
+sub: g.open === 1 ? 'seat open' : 'seats open',
+pick: function () { self.setState({ mtn: g.name }); },
+style: 'flex: none; width: 158px; min-height: 140px; box-sizing: border-box; text-align: left; display: flex; flex-direction: column; gap: 4px; background: #FFFFFF; color: #13213A; border-radius: 16px; border: ' + (on ? '2px solid #13213A; padding: 12px' : '1px solid #D3DDE7; padding: 13px')
+};
+});
+var cards = picked ? picked.rides.map(function (r) {
+var t = r[0].split(' ');
+var icons = [];
+for (var k = 0; k < r[4]; k++) icons.push({ style: 'width: 15px; height: 17px; box-sizing: border-box; border-radius: 4px 4px 6px 6px; border: 2px solid #13213A; background: ' + (k < r[4] - r[3] ? '#13213A' : 'transparent') });
+return {
+t1: t[0], t2: t[1], who: r[2], initial: r[2].charAt(0), gas: '$' + r[5] + ' gas', from: r[6], riders: r[7],
+seats: r[3] + ' of ' + r[4] + (r[4] === 1 ? ' seat open' : ' seats open'),
+seatIcons: icons,
+avStyle: 'flex: none; width: 30px; height: 30px; border-radius: 15px; color: #FFFFFF; font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; background: ' + (AV[r[2]] || '#13213A')
+};
+}) : [];
+
+var navStyle = function (off) { return 'width: 44px; height: 44px; background: transparent; border: 0; color: #13213A; font-size: 20px; font-weight: 800; opacity: ' + (off ? '0.25' : '1'); };
+return {
+monthName: mo.name,
+noPrev: m === 11,
+noNext: m === 12,
+prevStyle: navStyle(m === 11),
+nextStyle: navStyle(m === 12),
+prevMonth: function () { self.setState({ m: 11, sel: 21, open: false, mtn: null }); },
+nextMonth: function () { self.setState({ m: 12, sel: 4, open: false, mtn: null }); },
+cells: cells,
+hasEvent: !!ev,
+noEvent: !ev,
+kicker: ev ? (ev.id === 'copper' ? 'NEXT UP' : 'CLUB EVENT') + ' · IN ' + away + ' DAYS' : '',
+dayShort: ev && ev.to > ev.from ? short(ev.from) + ' to ' + short(ev.to) : short(sel),
+dayLong: (dowOf(sel) + ', ' + mo.short + ' ' + sel).toUpperCase(),
+evTitle: ev ? ev.title : '',
+evMeet: ev ? ev.meet : '',
+hasPlan: !!(ev && ev.plan),
+plan: ev && ev.plan ? ev.plan.map(function (p) { return { day: p[0], what: p[1] }; }) : [],
+goingText: ev ? (ev.going + (amIn ? 1 : 0)) + ' going' + (amIn ? ', including you' : '') : '',
+amIn: amIn,
+inLabel: amIn ? 'You are in ✓' : 'I am in',
+inStyle: 'min-height: 44px; border-radius: 12px; padding: 10px 18px; font-size: 15px; font-weight: 800; border: 1px solid #F5B800; background: ' + (amIn ? 'transparent' : '#F5B800') + '; color: ' + (amIn ? '#F5B800' : '#13213A'),
+toggleIn: function () {
+if (!ev) return;
+var g = Object.assign({}, self.state.going);
+g[ev.id] = !g[ev.id];
+self.setState({ going: g });
+},
+hasEventRides: evRides.length > 0,
+showRides: !!ev && st.open && evRides.length > 0,
+ridesBtn: (st.open ? 'Hide rides' : 'Find a ride') + ' · ' + evRides.length,
+toggleRides: function () { self.setState({ open: !self.state.open }); },
+eventRides: evRides,
+eventRidesLabel: evRides.length + ' RIDES TO THIS EVENT · ' + openRides + ' WITH SEATS',
+hasOthers: list.length > 0,
+othersTitle: ev ? 'Other member rides' : 'Member rides',
+othersNote: 'by mountain · ' + short(sel),
+tiles: tiles,
+cards: cards,
+isEmpty: !ev && list.length === 0,
+postLabel: '+ Post a ride for ' + mo.short + ' ' + sel
+};
+}
+}
+</script>
+</body>
+</html>
