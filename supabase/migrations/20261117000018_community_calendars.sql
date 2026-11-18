@@ -32,17 +32,18 @@ declare
   v_m text[];
   v_host text;
 begin
-  if p_url is null or p_url ~ '[[:space:][:cntrl:]\\]' then
+  -- Printable ASCII only: no spaces, control, NBSP, zero-width or look-alike characters.
+  if p_url is null or p_url ~ '[^\x21-\x7e]' or p_url ~ '\\' then
     return false;
   end if;
   v_m := regexp_match(p_url, '^[hH][tT][tT][pP][sS]://([^/?#@:]+)/');
   if v_m is null then
     return false;
   end if;
-  v_host := lower(v_m[1]);
-  if v_host !~ '^[a-z0-9.-]+$' then
+  if v_m[1] !~ '^[A-Za-z0-9.-]+$' then
     return false;
   end if;
+  v_host := lower(v_m[1]);
   return v_host in ('calendar.google.com', 'outlook.office365.com', 'outlook.office.com', 'outlook.live.com')
       or v_host ~ '^[a-z0-9-]+(\.[a-z0-9-]+)*\.icloud\.com$';
 end;
@@ -80,7 +81,8 @@ begin
   if not public.is_community_admin(p_community_id) then
     raise exception 'Only community admins can set the calendar link.' using errcode = '42501';
   end if;
-  select ics_url into v_old from public.community_calendars where community_id = p_community_id;
+  -- Lock the row so this and a running sync take turns.
+  select ics_url into v_old from public.community_calendars where community_id = p_community_id for update;
 
   if v_url = '' then
     delete from public.community_events
@@ -121,7 +123,7 @@ as $$
   select c.community_id, c.ics_url from public.community_calendars c order by c.set_at;
 $$;
 
-create function public.apply_calendar_sync(p_community_id uuid, p_events jsonb, p_error text)
+create function public.apply_calendar_sync(p_community_id uuid, p_events jsonb, p_error text, p_url text default null)
 returns void
 language plpgsql
 security definer
@@ -140,8 +142,15 @@ declare
   v_start timestamptz;
   v_end timestamptz;
   v_all_day boolean;
+  v_stored text;
 begin
-  if not exists (select 1 from public.community_calendars where community_id = p_community_id) then
+  -- Lock the link row first: syncs and link changes then run one at a time.
+  select ics_url into v_stored from public.community_calendars where community_id = p_community_id for update;
+  if not found then
+    return;
+  end if;
+  -- The link changed while the caller was fetching the old one.
+  if p_url is not null and p_url is distinct from v_stored then
     return;
   end if;
   if p_error is not null then
@@ -224,5 +233,5 @@ revoke execute on function public.set_community_calendar(uuid, text) from public
 grant execute on function public.set_community_calendar(uuid, text) to authenticated;
 revoke execute on function public.calendars_to_sync() from public, anon, authenticated;
 grant execute on function public.calendars_to_sync() to service_role;
-revoke execute on function public.apply_calendar_sync(uuid, jsonb, text) from public, anon, authenticated;
-grant execute on function public.apply_calendar_sync(uuid, jsonb, text) to service_role;
+revoke execute on function public.apply_calendar_sync(uuid, jsonb, text, text) from public, anon, authenticated;
+grant execute on function public.apply_calendar_sync(uuid, jsonb, text, text) to service_role;

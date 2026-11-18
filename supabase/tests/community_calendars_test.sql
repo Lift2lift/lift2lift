@@ -52,6 +52,15 @@ begin
   assert not public.calendar_url_ok('https://calendar.google.com@evil.test/x');
   assert not public.calendar_url_ok('https://calendar.google.com\x/x');
   assert not public.calendar_url_ok('https://.icloud.com/x');
+  assert public.calendar_url_ok('https://Calendar.Google.com/x');
+  assert not public.calendar_url_ok('https://outloo' || U&'\212A' || '.live.com/x'), 'kelvin sign host';
+  assert not public.calendar_url_ok('https://calendar.google.com/x' || U&'\00A0'), 'nbsp';
+  assert not public.calendar_url_ok('https://calendar.google.com./x'), 'trailing dot';
+  assert not public.calendar_url_ok('https://calendar%2egoogle.com/x'), 'percent host';
+  assert not public.calendar_url_ok('https://evil.test/?h=calendar.google.com/');
+  assert not public.calendar_url_ok('https://evil.test/#https://calendar.google.com/x');
+  assert not public.calendar_url_ok('https://calendar.google.com/a' || chr(92) || 'b'), 'backslash in path';
+  assert not public.calendar_url_ok('https://icloud.com/x');
   assert not public.calendar_url_ok('ftp://calendar.google.com/x');
 end $$;
 
@@ -280,3 +289,94 @@ reset role;
 do $$ begin
   assert exists (select 1 from public.community_events where ics_uid = 'o-1'), 'other community stays';
 end $$;
+
+-- Fix round: link changed mid-fetch, no-row syncs, cancel path releases rides, anon.
+insert into public.community_calendars (community_id, ics_url)
+values ((select id from cev where name = 'club'), 'https://calendar.google.com/calendar/ical/fix/basic.ics');
+set role service_role;
+do $$
+declare
+  v_club uuid := (select id from cev where name = 'club');
+  v_other uuid := (select id from cev where name = 'other');
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '8 days';
+  v_payload jsonb := jsonb_build_array(
+    jsonb_build_object('uid', 'x-1', 'title', 'Fix one', 'starts_at', (d + interval '9 hours') at time zone 'America/Denver',
+      'ends_at', (d + interval '11 hours') at time zone 'America/Denver', 'all_day', false),
+    jsonb_build_object('uid', 'x-2', 'title', 'Fix two', 'starts_at', (d + interval '1 day 9 hours') at time zone 'America/Denver',
+      'ends_at', (d + interval '1 day 11 hours') at time zone 'America/Denver', 'all_day', false));
+begin
+  -- Link changed while fetching: nothing changes, not even the error or stamp.
+  perform public.apply_calendar_sync(v_club, v_payload, null, 'https://calendar.google.com/calendar/ical/old/basic.ics');
+  perform public.apply_calendar_sync(v_club, null, 'stale error', 'https://calendar.google.com/calendar/ical/old/basic.ics');
+  -- A community with no link gets nothing.
+  perform public.apply_calendar_sync(v_other, v_payload, null);
+  perform public.apply_calendar_sync(v_other, v_payload, null, 'https://calendar.google.com/x');
+  -- Matching url applies.
+  perform public.apply_calendar_sync(v_club, v_payload, null, 'https://calendar.google.com/calendar/ical/fix/basic.ics');
+end $$;
+reset role;
+do $$
+begin
+  assert (select count(*) from public.community_events where ics_uid in ('x-1', 'x-2')) = 2, 'only the matching-url sync applied, and only for the club';
+  assert not exists (select 1 from public.community_events where community_id = (select id from cev where name = 'other') and ics_uid in ('x-1', 'x-2')), 'no-row sync inserted nothing';
+  assert (select last_error is null and last_synced_at is not null from public.community_calendars where community_id = (select id from cev where name = 'club')), 'stale error ignored';
+end $$;
+-- A stale url with an error or payload leaves the stamps alone.
+update public.community_calendars set last_synced_at = null where community_id = (select id from cev where name = 'club');
+set role service_role;
+select public.apply_calendar_sync((select id from cev where name = 'club'), '[]'::jsonb, null, 'https://calendar.google.com/old');
+select public.apply_calendar_sync((select id from cev where name = 'club'), null, 'nope', 'https://calendar.google.com/old');
+reset role;
+do $$
+begin
+  assert (select last_synced_at is null and last_error is null from public.community_calendars where community_id = (select id from cev where name = 'club')), 'stale url changes nothing';
+  assert (select count(*) from public.community_events where ics_uid in ('x-1', 'x-2') and cancelled_at is null) = 2, 'stale empty payload cancelled nothing';
+end $$;
+
+-- A ride on x-1; a sync without x-1 cancels it and releases the ride.
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'ca000000-0000-4000-8000-0000000000c1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '8 days';
+  v_id uuid;
+begin
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '8 hours') at time zone 'America/Denver', (d + interval '15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', (select id from cev where name = 'club'),
+          (select id from public.community_events where ics_uid = 'x-1'))
+  returning id into v_id;
+  assert (select event_id from public.rides where id = v_id) is not null, 'linked';
+  insert into cev values ('ride2', v_id);
+end $$;
+set role service_role;
+do $$
+declare d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '8 days';
+begin
+  perform public.apply_calendar_sync((select id from cev where name = 'club'), jsonb_build_array(
+    jsonb_build_object('uid', 'x-2', 'title', 'Fix two', 'starts_at', (d + interval '1 day 9 hours') at time zone 'America/Denver',
+      'ends_at', (d + interval '1 day 11 hours') at time zone 'America/Denver', 'all_day', false)), null);
+end $$;
+reset role;
+do $$
+begin
+  assert (select cancelled_at is not null from public.community_events where ics_uid = 'x-1'), 'x-1 cancelled';
+  assert (select event_id from public.rides where id = (select id from cev where name = 'ride2')) is null, 'cancel path releases the ride';
+end $$;
+
+-- anon can run none of them.
+grant select on cev to anon;
+set role anon;
+do $$
+declare v_club uuid := (select id from cev where name = 'club');
+begin
+  begin perform public.apply_calendar_sync(v_club, '[]'::jsonb, null); raise exception 'FAIL anon sync';
+  exception when insufficient_privilege then null; end;
+  begin perform * from public.calendars_to_sync(); raise exception 'FAIL anon list';
+  exception when insufficient_privilege then null; end;
+  begin perform public.community_calendar(v_club); raise exception 'FAIL anon read';
+  exception when insufficient_privilege then null; end;
+  begin perform public.set_community_calendar(v_club, null); raise exception 'FAIL anon set';
+  exception when insufficient_privilege then null; end;
+end $$;
+reset role;
