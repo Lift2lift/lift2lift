@@ -345,7 +345,7 @@ hasPlan: !!(ev && ev.plan),
 plan: ev && ev.plan ? ev.plan.map(function (p) { return { day: p[0], what: p[1] }; }) : [],
 goingText: ev ? (ev.going + (amIn ? 1 : 0)) + ' going' + (amIn ? ', including you' : '') : '',
 amIn: amIn,
-inLabel: amIn ? 'You are in ✓' : 'I am in',
+inLabel: amIn ? 'You are going ✓' : 'I am going',
 inStyle: 'min-height: 44px; border-radius: 12px; padding: 10px 18px; font-size: 15px; font-weight: 800; border: 1px solid #F5B800; background: ' + (amIn ? 'transparent' : '#F5B800') + '; color: ' + (amIn ? '#F5B800' : '#13213A'),
 toggleIn: function () {
 if (!ev) return;
