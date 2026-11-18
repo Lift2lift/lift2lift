@@ -47,6 +47,29 @@ export const webDevice: DeviceServices = {
     return new Promise<void>(() => {}); // the page is leaving
   },
 
+  /** This page, without an earlier sign-in result. */
+  googleReturnTo() {
+    const u = new URL(window.location.href);
+    u.searchParams.delete('google_calendar');
+    u.hash = '';
+    return u.toString();
+  },
+
+  /** Leaves for Google; Google sends the browser back to this page with ?google_calendar=…. */
+  openGoogleSignIn(url) {
+    window.location.assign(url);
+    return new Promise<string | null>(() => {}); // the page is leaving
+  },
+
+  takeGoogleResult() {
+    const u = new URL(window.location.href);
+    const result = u.searchParams.get('google_calendar');
+    if (result === null) return null;
+    u.searchParams.delete('google_calendar');
+    window.history.replaceState(window.history.state, '', u.toString());
+    return result;
+  },
+
   /** Opens the file chooser (on phones this offers the camera too), then shrinks the photo to a JPEG. */
   pickPhoto() {
     return new Promise<PickedPhoto | null>((resolve, reject) => {

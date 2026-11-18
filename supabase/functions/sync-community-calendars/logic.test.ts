@@ -1,7 +1,7 @@
 // Run with: node --test supabase/functions/sync-community-calendars/logic.test.ts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ALLOWED_HOSTS, calendarUrlProblem, eventsFromIcs, fetchCalendar, guessResort, normalizeCalendarUrl, parseCalendar } from './logic.ts';
+import { ALLOWED_HOSTS, calendarUrlProblem, eventsFromGoogle, eventsFromIcs, fetchCalendar, guessResort, htmlToText, normalizeCalendarUrl, parseCalendar } from './logic.ts';
 
 const NOW = new Date('2026-11-17T12:00:00Z');
 const BAD = 'Use a Google, Outlook or iCloud calendar link.';
@@ -502,4 +502,120 @@ test('fetchCalendar rejects invalid UTF-8, empty bodies and non-200 statuses', a
 });
 test('fetchCalendar maps a thrown fetch error to the generic message', async () => {
   await assert.rejects(fetchCalendar(GOOD, stub(new Error('secret detail https://x')).fn), FAILED);
+});
+
+// ---------------------------------------------------------------- Google Calendar API events
+
+test('google: timed event, uid keyed by the Denver date, resort guessed, HTML description', () => {
+  const [e, ...rest] = eventsFromGoogle(
+    [
+      {
+        id: 'abc',
+        iCalUID: 'abc@google.com',
+        status: 'confirmed',
+        summary: 'Copper day',
+        description: 'Meet at <b>Lot 2</b><br>Bring &amp; share&nbsp;snacks',
+        location: 'Copper Mountain',
+        start: { dateTime: '2026-11-20T06:30:00-07:00' },
+        end: { dateTime: '2026-11-20T16:00:00-07:00' },
+      },
+    ],
+    NOW,
+    resorts,
+  );
+  assert.equal(rest.length, 0);
+  assert.deepEqual(e, {
+    uid: 'abc@google.com|2026-11-20',
+    title: 'Copper day',
+    description: 'Meet at Lot 2\nBring & share snacks',
+    location: 'Copper Mountain',
+    resort_id: 'copper',
+    starts_at: '2026-11-20T13:30:00.000Z',
+    ends_at: '2026-11-20T23:00:00.000Z',
+    all_day: false,
+  });
+});
+
+test('google: evening UTC instant keys on the Denver date, not the UTC date', () => {
+  const [e] = eventsFromGoogle([{ iCalUID: 'late', summary: 'Night ski', start: { dateTime: '2026-11-21T03:00:00Z' }, end: { dateTime: '2026-11-21T05:00:00Z' } }], NOW, resorts);
+  assert.equal(e.uid, 'late|2026-11-20');
+});
+
+test('google: all-day events use Denver midnights and an exclusive end date, like ICS', () => {
+  const [one, multi] = eventsFromGoogle(
+    [
+      { iCalUID: 'swap', summary: 'Ski swap', start: { date: '2026-11-22' }, end: { date: '2026-11-23' } },
+      { iCalUID: 'trip', summary: 'Hut trip', start: { date: '2026-12-04' }, end: { date: '2026-12-07' } },
+    ],
+    NOW,
+    resorts,
+  );
+  assert.equal(one.uid, 'swap|2026-11-22');
+  assert.equal(one.all_day, true);
+  assert.equal(one.starts_at, '2026-11-22T07:00:00.000Z');
+  assert.equal(one.ends_at, '2026-11-22T07:00:00.000Z');
+  assert.equal(multi.starts_at, '2026-12-04T07:00:00.000Z');
+  assert.equal(multi.ends_at, '2026-12-06T07:00:00.000Z', 'last day is Dec 6');
+});
+
+test('google: matches the ICS uid for the same occurrence', () => {
+  const ics = cal(ev('UID:same@google.com', 'SUMMARY:Copper day', 'DTSTART;TZID=America/Denver:20261120T063000', 'DTEND;TZID=America/Denver:20261120T160000'));
+  const [fromIcs] = run(ics);
+  const [fromGoogle] = eventsFromGoogle(
+    [{ iCalUID: 'same@google.com', summary: 'Copper day', start: { dateTime: '2026-11-20T06:30:00-07:00' }, end: { dateTime: '2026-11-20T16:00:00-07:00' } }],
+    NOW,
+    resorts,
+  );
+  assert.deepEqual(fromGoogle, fromIcs);
+});
+
+test('google: recurring instances key on their original start, so a moved time keeps its row', () => {
+  const events = eventsFromGoogle(
+    [
+      { id: 'w_1', iCalUID: 'weekly', recurringEventId: 'w', summary: 'Weekly', start: { dateTime: '2026-11-24T18:00:00-07:00' }, originalStartTime: { dateTime: '2026-11-24T18:00:00-07:00' } },
+      { id: 'w_2', iCalUID: 'weekly', recurringEventId: 'w', summary: 'Weekly (late)', start: { dateTime: '2026-12-01T18:30:00-07:00' }, originalStartTime: { dateTime: '2026-12-01T18:00:00-07:00' } },
+      { id: 'w_3', iCalUID: 'weekly', recurringEventId: 'w', summary: 'Weekly (moved)', start: { dateTime: '2026-12-09T18:00:00-07:00' }, originalStartTime: { dateTime: '2026-12-08T18:00:00-07:00' } },
+    ],
+    NOW,
+    resorts,
+  );
+  assert.deepEqual(events.map((e) => e.uid), ['weekly|2026-11-24', 'weekly|2026-12-01', 'weekly|2026-12-08']);
+  assert.equal(events[1].starts_at, '2026-12-02T01:30:00.000Z');
+});
+
+test('google: two on one day get a counter; skips cancelled, non-default types, unreadable and out-of-window items', () => {
+  const events = eventsFromGoogle(
+    [
+      { iCalUID: 'two', summary: 'AM lap', start: { dateTime: '2026-11-25T09:00:00-07:00' } },
+      { iCalUID: 'two', summary: 'PM lap', start: { dateTime: '2026-11-25T14:00:00-07:00' } },
+      { iCalUID: 'gone', status: 'cancelled', summary: 'Gone', start: { dateTime: '2026-11-25T09:00:00-07:00' } },
+      { iCalUID: 'ooo', eventType: 'outOfOffice', summary: 'Out', start: { dateTime: '2026-11-25T09:00:00-07:00' } },
+      { iCalUID: 'wl', eventType: 'workingLocation', summary: 'Home', start: { date: '2026-11-25' }, end: { date: '2026-11-26' } },
+      { summary: 'No id', start: { dateTime: '2026-11-25T09:00:00-07:00' } },
+      { iCalUID: 'bad', summary: 'Bad time', start: { dateTime: 'soon' } },
+      { iCalUID: 'old', summary: 'Last month', start: { dateTime: '2026-10-01T09:00:00-06:00' } },
+      { iCalUID: 'far', summary: 'Next fall', start: { dateTime: '2027-09-01T09:00:00-06:00' } },
+      null as never,
+    ],
+    NOW,
+    resorts,
+  );
+  assert.deepEqual(events.map((e) => [e.uid, e.title]), [
+    ['two|2026-11-25', 'AM lap'],
+    ['two|2026-11-25|2', 'PM lap'],
+  ]);
+  assert.equal(events[0].ends_at, '2026-11-25T17:00:00.000Z', 'no end: one hour');
+});
+
+test('google: short or missing titles become "Club event"; long text is cut', () => {
+  const [e] = eventsFromGoogle([{ iCalUID: 'x', summary: 'a', location: 'L'.repeat(200), start: { dateTime: '2026-11-25T09:00:00-07:00' } }], NOW, resorts);
+  assert.equal(e.title, 'Club event');
+  assert.equal(e.location.length, 120);
+});
+
+test('htmlToText', () => {
+  assert.equal(htmlToText('<p>One</p><p>Two</p>'), 'One\nTwo');
+  assert.equal(htmlToText('a &lt;b&gt; &#39;c&#39; &#x1F3BF; &bogus;'), "a <b> 'c' 🎿 &bogus;");
+  assert.equal(htmlToText('plain\n\n\n\ntext'), 'plain\n\ntext');
+  assert.equal(htmlToText('<a href="https://x.test">link</a>'), 'link');
 });
