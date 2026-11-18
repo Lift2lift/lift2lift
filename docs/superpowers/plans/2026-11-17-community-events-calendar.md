@@ -1,5 +1,7 @@
 # Community Events Calendar Implementation Plan
 
+> **Note:** some database functions and sync details changed while this plan was built (for example the 4-argument `apply_calendar_sync`, `claim_calendars_to_sync` replacing `calendars_to_sync`, `parseCalendar` returning `{ events, truncated }`, and all-day events as Denver dates). The tasks below are kept as written; see "Changes made during the build" at the end of `docs/superpowers/specs/2026-11-17-community-events-calendar-design.md` for what the code does now.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the community page into a calendar of club events (manual or imported from a Google/Outlook/iCloud ICS link) with RSVPs and members-only rides attached.
