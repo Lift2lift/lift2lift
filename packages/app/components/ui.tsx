@@ -18,14 +18,14 @@ import { useTheme } from '../lib/theme';
 import { TabBar } from './TabBar';
 
 /** Centered, keyboard-aware column for forms (sign-in, post a ride). */
-export function FormScreen({ children, header }: { children: ReactNode; header?: ReactNode }) {
+export function FormScreen({ children, header, wide }: { children: ReactNode; header?: ReactNode; /** 960 wide instead of 480. */ wide?: boolean }) {
   const t = useTheme();
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: t.bg }]} edges={header ? ['left', 'right'] : undefined}>
       {header}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={[styles.scroll, !header && styles.centered]} keyboardShouldPersistTaps="handled">
-          <View style={styles.column}>{children}</View>
+          <View style={[styles.column, wide && { maxWidth: 960 }]}>{children}</View>
         </ScrollView>
       </KeyboardAvoidingView>
       {header ? <TabBar /> : null}
