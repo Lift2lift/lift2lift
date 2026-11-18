@@ -66,6 +66,7 @@ type ProfileRow = {
 };
 
 const AVATARS_BUCKET = 'avatars';
+const COMMUNITY_PHOTOS_BUCKET = 'community-photos';
 
 type VerificationRow = {
   status: DriverVerification['status'];
@@ -209,18 +210,25 @@ export function createApi(supabase: SupabaseClient): Api {
 
   // Profile photos are private: signed links, cached until shortly before they expire.
   const urlCache = new Map<string, { url: string; until: number }>();
-  async function signAvatars(paths: (string | null | undefined)[]) {
+  async function signFrom(bucket: string, paths: (string | null | undefined)[]) {
     const now = Date.now();
-    const need = [...new Set(paths.filter((p): p is string => !!p))].filter((p) => (urlCache.get(p)?.until ?? 0) < now);
+    const key = (p: string) => `${bucket}:${p}`;
+    const need = [...new Set(paths.filter((p): p is string => !!p))].filter((p) => (urlCache.get(key(p))?.until ?? 0) < now);
     if (need.length) {
-      const { data } = await supabase.storage.from(AVATARS_BUCKET).createSignedUrls(need, 3600);
+      const { data } = await supabase.storage.from(bucket).createSignedUrls(need, 3600);
       for (const item of data ?? []) {
-        if (item.path && item.signedUrl) urlCache.set(item.path, { url: item.signedUrl, until: now + 50 * 60 * 1000 });
+        if (item.path && item.signedUrl) urlCache.set(key(item.path), { url: item.signedUrl, until: now + 50 * 60 * 1000 });
       }
     }
     const out: Record<string, string> = {};
-    for (const p of paths) if (p && urlCache.has(p)) out[p] = urlCache.get(p)!.url;
+    for (const p of paths) if (p && urlCache.has(key(p))) out[p] = urlCache.get(key(p))!.url;
     return out;
+  }
+  const signAvatars = (paths: (string | null | undefined)[]) => signFrom(AVATARS_BUCKET, paths);
+  /** Community profile pictures: path to signed link, or null. */
+  async function communityPhotos(paths: (string | null | undefined)[]) {
+    const urls = await signFrom(COMMUNITY_PHOTOS_BUCKET, paths);
+    return (p: string | null | undefined) => (p ? urls[p] ?? null : null);
   }
 
   const api: Api = {
@@ -375,12 +383,15 @@ export function createApi(supabase: SupabaseClient): Api {
 
     async myCommunities() {
       const { data } = check(await supabase.rpc('my_communities'));
-      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number; next_event: { id: string; title: string; starts_at: string; all_day: boolean } | null };
-      return ((data ?? []) as Row[]).map(
+      type Row = { id: string; name: string; description: string; photo_path: string | null; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number; next_event: { id: string; title: string; starts_at: string; all_day: boolean } | null };
+      const rows = (data ?? []) as Row[];
+      const photo = await communityPhotos(rows.map((c) => c.photo_path));
+      return rows.map(
         (c): Community => ({
           id: c.id,
           name: c.name,
           description: c.description ?? '',
+          photoUrl: photo(c.photo_path),
           code: c.code,
           role: c.role,
           listed: c.listed !== false,
@@ -405,12 +416,16 @@ export function createApi(supabase: SupabaseClient): Api {
       const { data } = check(await supabase.rpc('community_page', { p_community_id: communityId }));
       type M = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null; role: CommunityRole; joined_at: string };
       type Q = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null; requested_at: string };
-      const d = data as { id: string; name: string; description: string; code: string | null; listed: boolean; my_role: CommunityRole; member_count: number; members: M[]; requests: Q[] };
-      const urls = await signAvatars([...d.members, ...(d.requests ?? [])].map((m) => m.avatar_path));
+      const d = data as { id: string; name: string; description: string; photo_path: string | null; code: string | null; listed: boolean; my_role: CommunityRole; member_count: number; members: M[]; requests: Q[] };
+      const [urls, photo] = await Promise.all([
+        signAvatars([...d.members, ...(d.requests ?? [])].map((m) => m.avatar_path)),
+        communityPhotos([d.photo_path]),
+      ]);
       return {
         id: d.id,
         name: d.name,
         description: d.description ?? '',
+        photoUrl: photo(d.photo_path),
         code: d.code,
         listed: d.listed !== false,
         myRole: d.my_role,
@@ -570,6 +585,24 @@ export function createApi(supabase: SupabaseClient): Api {
     async updateCommunity(communityId, name, description) {
       check(await supabase.rpc('update_community', { p_community_id: communityId, p_name: name, p_description: description }));
     },
+    async setCommunityPhoto(communityId, photo) {
+      const bucket = supabase.storage.from(COMMUNITY_PHOTOS_BUCKET);
+      let path: string | null = null;
+      if (photo) {
+        path = `${communityId}/photo-${Date.now()}.${photo.ext}`;
+        const { error } = await bucket.upload(path, photo.body, { contentType: photo.contentType });
+        if (error) throw new Error("That photo didn't upload. Try a smaller JPEG or PNG.");
+      }
+      let old: string | null;
+      try {
+        const { data } = check(await supabase.rpc('set_community_photo', { p_community_id: communityId, p_path: path }));
+        old = (data as string | null) ?? null;
+      } catch (e) {
+        if (path) await bucket.remove([path]);
+        throw e;
+      }
+      if (old) await bucket.remove([old]);
+    },
     async removeCommunityMember(communityId, userId) {
       check(await supabase.rpc('remove_community_member', { p_community_id: communityId, p_user_id: userId }));
     },
@@ -582,11 +615,14 @@ export function createApi(supabase: SupabaseClient): Api {
     },
     async popularCommunities() {
       const { data } = check(await supabase.rpc('popular_communities', { p_limit: 20 }));
-      type Row = { id: string; name: string; description: string; member_count: number; upcoming_rides: number; my_status: PopularCommunity['myStatus'] };
-      return ((data ?? []) as Row[]).map((c) => ({
+      type Row = { id: string; name: string; description: string; photo_path: string | null; member_count: number; upcoming_rides: number; my_status: PopularCommunity['myStatus'] };
+      const rows = (data ?? []) as Row[];
+      const photo = await communityPhotos(rows.map((c) => c.photo_path));
+      return rows.map((c) => ({
         id: c.id,
         name: c.name,
         description: c.description ?? '',
+        photoUrl: photo(c.photo_path),
         memberCount: Number(c.member_count),
         upcomingRides: Number(c.upcoming_rides),
         myStatus: c.my_status,

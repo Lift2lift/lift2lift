@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Button, Card, Field, FormScreen, Label, Loading, Muted, Notice } from '../components/ui';
 import { cleanCode, COMMUNITY_CODE_LENGTH, formatCode } from '../lib/communities';
@@ -235,7 +235,7 @@ export function CommunitiesScreen() {
               style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
             >
               <Card style={{ padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <CommunityBadge name={c.name} />
+                <CommunityBadge name={c.name} photoUrl={c.photoUrl} />
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                   <Text numberOfLines={1} style={{ color: t.ink, fontSize: 17, fontWeight: '800' }}>
                     {c.name}
@@ -282,7 +282,7 @@ export function CommunitiesScreen() {
                   accessibilityRole={c.myStatus === 'member' ? 'button' : undefined}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}
                 >
-                  <CommunityBadge name={c.name} />
+                  <CommunityBadge name={c.name} photoUrl={c.photoUrl} />
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Text numberOfLines={1} style={{ color: t.ink, fontSize: 17, fontWeight: '800' }}>
                       {c.name}
@@ -325,7 +325,8 @@ export function CommunitiesScreen() {
 const BADGE_COLORS = ['#13213A', '#2C5BB8', '#0F7A6C', '#6B3FA0', '#B23A48', '#9A5B00'];
 
 /** Initials in a rounded square, the community's avatar. */
-export function CommunityBadge({ name, size = 44 }: { name: string; size?: number }) {
+/** The community's profile picture, or colored initials when it has none. */
+export function CommunityBadge({ name, photoUrl, size = 44 }: { name: string; photoUrl?: string | null; size?: number }) {
   let h = 0;
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const bg = BADGE_COLORS[h % BADGE_COLORS.length];
@@ -337,6 +338,17 @@ export function CommunityBadge({ name, size = 44 }: { name: string; size?: numbe
       .map((w) => w[0])
       .join('')
       .toUpperCase() || '?';
+  if (photoUrl) {
+    return (
+      <Image
+        source={{ uri: photoUrl }}
+        style={{ width: size, height: size, borderRadius: size * 0.28 }}
+        resizeMode="cover"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      />
+    );
+  }
   return (
     <View
       style={{ width: size, height: size, borderRadius: size * 0.28, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}
