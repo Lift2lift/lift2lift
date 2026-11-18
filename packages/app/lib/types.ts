@@ -290,7 +290,7 @@ export type Community = {
   /** Requests to join waiting for an admin (0 for members). */
   pendingRequests: number;
   /** The soonest upcoming event, or null. */
-  nextEvent: { id: string; title: string; startsAt: string } | null;
+  nextEvent: { id: string; title: string; startsAt: string; allDay: boolean } | null;
 };
 
 /** An event on a community's calendar. */

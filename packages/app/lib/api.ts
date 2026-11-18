@@ -357,7 +357,7 @@ export function createApi(supabase: SupabaseClient): Api {
 
     async myCommunities() {
       const { data } = check(await supabase.rpc('my_communities'));
-      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number; next_event: { id: string; title: string; starts_at: string } | null };
+      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number; next_event: { id: string; title: string; starts_at: string; all_day: boolean } | null };
       return ((data ?? []) as Row[]).map(
         (c): Community => ({
           id: c.id,
@@ -369,7 +369,7 @@ export function createApi(supabase: SupabaseClient): Api {
           memberCount: Number(c.member_count),
           upcomingRides: Number(c.upcoming_rides),
           pendingRequests: Number(c.pending_requests ?? 0),
-          nextEvent: c.next_event ? { id: c.next_event.id, title: c.next_event.title, startsAt: c.next_event.starts_at } : null,
+          nextEvent: c.next_event ? { id: c.next_event.id, title: c.next_event.title, startsAt: c.next_event.starts_at, allDay: !!c.next_event.all_day } : null,
         }),
       );
     },

@@ -14,6 +14,7 @@ export function EventCalendar({
   maxMonth,
   marks,
   selectedDays,
+  focusDay,
   today,
   onPick,
 }: {
@@ -23,6 +24,7 @@ export function EventCalendar({
   maxMonth: Date;
   marks: Record<string, DayMark>;
   selectedDays: Set<string>; // every day of the selected event, or the one selected day
+  focusDay?: string; // the tapped day: outlined when it sits inside a multi-day selection
   today: string;
   onPick: (day: string) => void;
 }) {
@@ -76,6 +78,7 @@ export function EventCalendar({
               const rides = mark?.rides ?? 0;
               const multi = span === 'start' || span === 'middle' || span === 'end';
               const sel = selectedDays.has(day);
+              const focused = day === focusDay && selectedDays.size > 1;
               const past = day < today;
               const isToday = day === today;
               // Outer ends of a multi-day bar: the event's first/last day, or the week's edge.
@@ -85,6 +88,7 @@ export function EventCalendar({
               const rl = sel && multi ? (leftEnd ? 10 : 0) : 10;
               const rr = sel && multi ? (rightEnd ? 10 : 0) : 10;
               const d = parseDay(day);
+              const single = !!mark?.single || span === 'single';
               const label = `${MONTHS[d.getMonth()]} ${d.getDate()}${ev ? `, ${ev.title}` : ''}${rides ? `, ${rides} ride${rides === 1 ? '' : 's'}` : ''}`;
               return (
                 <Pressable
@@ -93,7 +97,7 @@ export function EventCalendar({
                   disabled={past}
                   accessibilityRole="button"
                   accessibilityLabel={label}
-                  accessibilityState={{ selected: sel, disabled: past }}
+                  accessibilityState={{ selected: focusDay ? day === focusDay : sel, disabled: past }}
                   style={({ pressed }) => ({
                     flex: 1,
                     height: 52,
@@ -106,14 +110,14 @@ export function EventCalendar({
                     borderTopRightRadius: rr,
                     borderBottomRightRadius: rr,
                     backgroundColor: sel ? t.ink : pressed && !past ? t.chip : 'transparent',
-                    borderWidth: isToday && !sel ? 1.5 : 0,
-                    borderColor: t.ink,
+                    borderWidth: focused ? 2 : isToday && !sel ? 1.5 : 0,
+                    borderColor: focused ? t.accent : t.ink,
                     opacity: past ? 0.3 : 1,
                   })}
                 >
                   <Text style={{ color: sel ? t.bg : t.ink, fontSize: 15, fontWeight: ev || rides ? '900' : '600', fontVariant: ['tabular-nums'] }}>{d.getDate()}</Text>
                   <View style={{ height: 13, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                    {span === 'single' ? <View style={{ width: 12, height: 5, borderRadius: 3, backgroundColor: sel ? t.bg : t.ink }} /> : null}
+                    {single ? <View style={{ width: 12, height: 5, borderRadius: 3, backgroundColor: sel ? t.bg : t.ink }} /> : null}
                     {rides ? (
                       <View style={{ minWidth: 16, paddingHorizontal: 4, borderRadius: 999, backgroundColor: t.accent }}>
                         <Text style={{ color: t.accentInk, fontSize: 11, fontWeight: '900', lineHeight: 13, textAlign: 'center', fontVariant: ['tabular-nums'] }}>{rides}</Text>

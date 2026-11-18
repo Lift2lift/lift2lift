@@ -11,8 +11,8 @@ import { MountainRides } from '../components/MountainRides';
 import { RideCard } from '../components/RideCard';
 import { SetupModal } from '../components/SetupModal';
 import { Button, Card, FormScreen, Label, Loading, Notice } from '../components/ui';
-import { addDays, isoDay, longDay, MON, parseDay, timeAgo } from '../lib/dates';
-import { dayMarks, eventDays, eventOn, initialDay, isMultiDay, kicker, memberRidesByMountain, nextEvent, ridesForEvent } from '../lib/events';
+import { addDays, clock, denverDay, isoDay, longDay, MON, parseDay, timeAgo } from '../lib/dates';
+import { dayMarks, eventDays, eventIsOver, eventsOn, initialDay, kicker, memberRidesByMountain, nextEvent, ridesForEvent } from '../lib/events';
 import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
 import { busyLegsByDay } from '../lib/trips';
@@ -57,7 +57,11 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
   const [rides, setRides] = useState<BoardRide[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; kind: 'success' | 'error' } | null>(
-    welcome === 'admin' ? { text: "You're the admin. Send the invite below to your members so they can join.", kind: 'success' } : welcome ? { text: "You're in! Rides posted here show up below and on the mountain boards.", kind: 'success' } : null,
+    welcome === 'admin'
+      ? { text: "You're the admin. Open Members to send the invite code to your club.", kind: 'success' }
+      : welcome
+        ? { text: "You're in. Club events and members-only rides show up here.", kind: 'success' }
+        : null,
   );
 
   const load = useCallback(async () => {
@@ -86,6 +90,8 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
   const [events, setEvents] = useState<CommunityEvent[] | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [day, setDay] = useState<string | null>(null);
+  // An event picked from the day's list; null shows the day's lead event. Cleared when the day changes.
+  const [chosenId, setChosenId] = useState<string | null>(null);
   const [month, setMonth] = useState<Date>(range.minMonth);
   const [formFor, setFormFor] = useState<null | 'new' | CommunityEvent>(null);
   const [rsvpBusy, setRsvpBusy] = useState(false);
@@ -137,7 +143,9 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
 
   const eventList = useMemo(() => events ?? [], [events]);
   const selectedDay = day ?? today;
-  const event = useMemo(() => eventOn(eventList, selectedDay), [eventList, selectedDay]);
+  const dayEvents = useMemo(() => eventsOn(eventList, selectedDay), [eventList, selectedDay]);
+  const event = dayEvents.find((e) => e.id === chosenId) ?? dayEvents[0] ?? null;
+  const otherEvents = dayEvents.filter((e) => e !== event);
   const upNext = useMemo(() => nextEvent(eventList, new Date()), [eventList]);
   const marks = useMemo(() => dayMarks(month, eventList, communityRides), [month, eventList, communityRides]);
   const selectedDays = useMemo(() => new Set(event ? eventDays(event) : [selectedDay]), [event, selectedDay]);
@@ -161,16 +169,11 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
     }
   }
 
-  /** Select a day; a day inside an event selects the event (from its first day, or today if under way). */
+  /** Select the tapped day; the hero shows that day's lead event. */
   function pick(next: string) {
-    const e = eventOn(eventList, next);
-    let target = next;
-    if (e && isMultiDay(e)) {
-      const first = eventDays(e)[0];
-      target = first > today ? first : today;
-    }
-    setDay(target);
-    setMonth(firstOfMonth(parseDay(target)));
+    if (next !== selectedDay) setChosenId(null);
+    setDay(next);
+    setMonth(firstOfMonth(parseDay(next)));
   }
 
   async function toggleIn(e: CommunityEvent) {
@@ -192,12 +195,17 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
   async function saveEvent(input: NewCommunityEvent) {
     if (!communityId) return;
     const editing = formFor && formFor !== 'new' ? formFor : null;
-    if (editing) await api.updateCommunityEvent(editing.id, input);
-    else await api.createCommunityEvent(communityId, input);
-    await loadEvents();
-    const first = isoDay(new Date(input.startsAt));
+    let id: string;
+    if (editing) {
+      await api.updateCommunityEvent(editing.id, input);
+      id = editing.id;
+    } else id = await api.createCommunityEvent(communityId, input);
+    // An edit can release rides that no longer fall on the event, so rides reload too.
+    await Promise.all([loadEvents(), load()]);
+    const first = input.allDay ? denverDay(input.startsAt) : isoDay(new Date(input.startsAt));
     const target = first > today ? first : today;
     setDay(target);
+    setChosenId(id);
     setMonth(firstOfMonth(parseDay(target)));
     setMessage({ text: editing ? 'Saved.' : 'Event added.', kind: 'success' });
   }
@@ -245,10 +253,11 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
   if (view === 'members') {
     return (
       <FormScreen header={<AppHeader />} wide>
+        {/* Members and events replace each other, so the two views never stack in history. */}
         <BackLink label={`‹ ${page.name}`} onPress={() => nav.replace('/community', { id: page.id })} />
         {notice}
         <CommunityMembers page={page} me={me} onChanged={load} onMessage={(text, kind) => setMessage(text === null ? null : { text, kind: kind ?? 'success' })}>
-          {page.myRole === 'admin' ? <ClubCalendarCard communityId={page.id} onSynced={() => void loadEvents()} /> : null}
+          {page.myRole === 'admin' ? <ClubCalendarCard communityId={page.id} onSynced={() => void Promise.all([loadEvents(), load()])} /> : null}
         </CommunityMembers>
       </FormScreen>
     );
@@ -273,7 +282,7 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button small variant="ghost" title="Members" onPress={() => nav.push('/community', { id: page.id, view: 'members' })} />
+          <Button small variant="ghost" title="Members" onPress={() => nav.replace('/community', { id: page.id, view: 'members' })} />
           {admin ? <Button small variant="ghost" title="+ Add event" onPress={() => setFormFor('new')} /> : null}
         </View>
       </View>
@@ -345,6 +354,7 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
               kicker={kicker(event, upNext, today)}
               rides={eventRides}
               busy={rsvpBusy}
+              over={eventIsOver(event, new Date(now))}
               canEdit={admin && event.source === 'manual'}
               onToggleIn={() => toggleIn(event)}
               onOfferRide={() => postRide(event)}
@@ -361,7 +371,50 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
             <Label>{weekdayLong(selectedDay)}</Label>
           )}
 
+          {/* The day's other events: tapping one shows it above. */}
+          {otherEvents.length ? (
+            <View style={{ gap: 8 }}>
+              <Label>{`Also on ${monthDay(selectedDay)}`}</Label>
+              <Card style={{ padding: 0 }}>
+                {otherEvents.map((e, i) => {
+                  const when = e.allDay ? 'All day' : clock(e.startsAt);
+                  const going = `${e.going} going`;
+                  return (
+                    <Pressable
+                      key={e.id}
+                      onPress={() => setChosenId(e.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${e.title}, ${when}, ${going}. Show this event`}
+                      style={({ pressed }) => ({
+                        minHeight: 44,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 12,
+                        paddingHorizontal: 14,
+                        paddingVertical: 10,
+                        borderTopWidth: i === 0 ? 0 : 1,
+                        borderTopColor: t.line,
+                        backgroundColor: pressed ? t.chip : 'transparent',
+                      })}
+                    >
+                      <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: t.ink, fontSize: 15, fontWeight: '800' }}>
+                        {e.title}
+                      </Text>
+                      <Text style={{ color: t.muted, fontSize: 13 }}>{`${when} · ${going}`}</Text>
+                    </Pressable>
+                  );
+                })}
+              </Card>
+            </View>
+          ) : null}
+
           <MountainRides title={event ? 'Other member rides' : 'Member rides'} note={`by mountain · ${longDay(selectedDay)}`} groups={groups} renderRide={renderRide} />
+
+          {event || groups.length ? (
+            <View style={{ flexDirection: 'row' }}>
+              <Button small variant="ghost" title={`+ Post a ride for ${monthDay(selectedDay)}`} onPress={() => postRide(null)} />
+            </View>
+          ) : null}
 
           {!event && !groups.length ? (
             <View style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: t.line, borderRadius: 16, paddingVertical: 28, paddingHorizontal: 24, alignItems: 'center', gap: 8 }}>
@@ -384,6 +437,7 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
             maxMonth={range.maxMonth}
             marks={marks}
             selectedDays={selectedDays}
+            focusDay={selectedDay}
             today={today}
             onPick={pick}
           />

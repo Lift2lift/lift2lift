@@ -32,6 +32,7 @@ export function EventHero({
   kicker,
   rides,
   busy,
+  over,
   canEdit,
   onToggleIn,
   onOfferRide,
@@ -43,6 +44,7 @@ export function EventHero({
   kicker: string;
   rides: BoardRide[]; // rides to this event
   busy: boolean;
+  over: boolean; // the event has ended: no RSVP button, the going count stays
   canEdit: boolean; // admin and source === 'manual'
   onToggleIn: () => void;
   onOfferRide: () => void;
@@ -105,24 +107,26 @@ export function EventHero({
         </View>
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
-          <Pressable
-            onPress={onToggleIn}
-            disabled={busy}
-            accessibilityRole="button"
-            accessibilityState={{ selected: event.iAmIn, disabled: busy, busy }}
-            style={({ pressed }) => ({
-              ...btn,
-              borderColor: t.accent,
-              backgroundColor: event.iAmIn ? 'transparent' : t.accent,
-              opacity: busy ? 0.6 : pressed ? 0.85 : 1,
-            })}
-          >
-            {busy ? (
-              <ActivityIndicator color={event.iAmIn ? t.accent : t.accentInk} />
-            ) : (
-              <Text style={{ color: event.iAmIn ? t.accent : t.accentInk, fontSize: 15, fontWeight: '800' }}>{event.iAmIn ? 'You are in ✓' : 'I am in'}</Text>
-            )}
-          </Pressable>
+          {over ? null : (
+            <Pressable
+              onPress={onToggleIn}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityState={{ selected: event.iAmIn, disabled: busy, busy }}
+              style={({ pressed }) => ({
+                ...btn,
+                borderColor: t.accent,
+                backgroundColor: event.iAmIn ? 'transparent' : t.accent,
+                opacity: busy ? 0.6 : pressed ? 0.85 : 1,
+              })}
+            >
+              {busy ? (
+                <ActivityIndicator color={event.iAmIn ? t.accent : t.accentInk} />
+              ) : (
+                <Text style={{ color: event.iAmIn ? t.accent : t.accentInk, fontSize: 15, fontWeight: '800' }}>{event.iAmIn ? 'You are in ✓' : 'I am in'}</Text>
+              )}
+            </Pressable>
+          )}
           {rides.length > 0 ? (
             <Pressable
               onPress={() => setShowRides(!showRides)}
