@@ -53,6 +53,13 @@ export function EventHero({
   const t = useTheme();
   const [showRides, setShowRides] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Another event picked: start over so a half-done cancel or an open rides list does not carry across.
+  const [seenId, setSeenId] = useState(event.id);
+  if (seenId !== event.id) {
+    setSeenId(event.id);
+    setShowRides(false);
+    setConfirmCancel(false);
+  }
   const soft = mix(t.header, t.headerInk, 0.65);
   const edge = mix(t.header, t.headerInk, 0.25);
   const detail = detailLine(event);
