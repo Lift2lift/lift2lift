@@ -205,6 +205,115 @@ begin
   end;
 end $$;
 
+-- Rides linked to events.
+reset role;
+insert into public.communities (code_hash, name) values (public.community_code_hash('OTHERCLB2'), 'Other Club');
+insert into ev values ('other', (select id from public.communities where name = 'Other Club'));
+update public.driver_verifications set status = 'submitted' where user_id = 'e5000000-0000-4000-8000-0000000000c1';
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000c1', false);
+select public.join_community('OTHERCLB2');
+
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare
+  v_club uuid := (select id from ev where name = 'club');
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+begin
+  insert into ev values ('E', public.create_community_event(v_club, 'Dawn patrol', '', '', 'eldora',
+    (d + interval '7 hours') at time zone 'America/Denver', (d + interval '9 hours') at time zone 'America/Denver', false));
+  insert into ev values ('M', public.create_community_event(v_club, 'Ride camp', '', '', 'eldora',
+    (d + interval '7 days 8 hours') at time zone 'America/Denver', (d + interval '9 days 16 hours') at time zone 'America/Denver', false));
+end $$;
+
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000c1', false);
+do $$
+declare
+  v_club uuid := (select id from ev where name = 'club');
+  v_other uuid := (select id from ev where name = 'other');
+  v_e uuid := (select id from ev where name = 'E');
+  v_m uuid := (select id from ev where name = 'M');
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+  v_id uuid;
+begin
+  -- A ride on the event's day.
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '7 hours') at time zone 'America/Denver', (d + interval '15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', v_club, v_e)
+  returning id into v_id;
+  insert into ev values ('r1', v_id);
+  assert (select event_title from public.ride_board where id = v_id) = 'Dawn patrol', 'board shows the event';
+  assert (select event_id from public.ride_board where id = v_id) = v_e, 'board shows the event id';
+  assert (public.ride_for_edit(v_id)->>'event_id')::uuid = v_e, 'edit view shows the event';
+  assert (select (x->>'ride_count')::int from jsonb_array_elements(public.community_events(v_club, current_date, current_date + 30)) x
+          where x->>'id' = v_e::text) = 1, public.community_events(v_club, current_date, current_date + 30)::text;
+
+  -- The wrong day.
+  begin
+    insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+    values ('eldora', 'round_trip', (d + interval '1 day 7 hours') at time zone 'America/Denver', (d + interval '1 day 15 hours') at time zone 'America/Denver',
+            'Base', 'Farrand Field', 3, 5, '303-555-0111', v_club, v_e);
+    raise exception 'FAIL: wrong day';
+  exception when raise_exception then
+    assert sqlerrm = 'That event isn''t on this ride''s day.', sqlerrm;
+  end;
+  -- An open ride.
+  begin
+    insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, event_id)
+    values ('eldora', 'round_trip', (d + interval '4 days 7 hours') at time zone 'America/Denver', (d + interval '4 days 15 hours') at time zone 'America/Denver',
+            'Base', 'Farrand Field', 3, 5, '303-555-0111', v_e);
+    raise exception 'FAIL: open ride for an event';
+  exception when raise_exception then
+    assert sqlerrm = 'Only community rides can be for an event.', sqlerrm;
+  end;
+  -- Another community's ride.
+  begin
+    insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+    values ('eldora', 'round_trip', (d + interval '3 days 7 hours') at time zone 'America/Denver', (d + interval '3 days 15 hours') at time zone 'America/Denver',
+            'Base', 'Farrand Field', 3, 5, '303-555-0111', v_other, v_e);
+    raise exception 'FAIL: other community';
+  exception when raise_exception then
+    assert sqlerrm = 'Pick an event from this ride''s community.', sqlerrm;
+  end;
+  -- A day inside a multi-day event.
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '8 days 7 hours') at time zone 'America/Denver', (d + interval '8 days 15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', v_club, v_m)
+  returning id into v_id;
+  insert into ev values ('r2', v_id);
+
+  -- Moving the ride off the event's day unlinks it.
+  update public.rides set depart_at = depart_at + interval '2 days', return_at = return_at + interval '2 days'
+   where id = (select id from ev where name = 'r1');
+  assert (select event_id from public.rides where id = (select id from ev where name = 'r1')) is null, 'moved ride unlinked';
+  assert (select (x->>'ride_count')::int from jsonb_array_elements(public.community_events(v_club, current_date, current_date + 30)) x
+          where x->>'id' = v_e::text) = 0, 'count drops';
+
+  -- Link a ride again, for the event move below.
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '7 hours') at time zone 'America/Denver', (d + interval '15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', v_club, v_e)
+  returning id into v_id;
+  insert into ev values ('r3', v_id);
+end $$;
+
+-- Ava moves E to D+3: a ride still on D is unlinked. Then cancels M.
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+begin
+  perform public.update_community_event((select id from ev where name = 'E'), 'Dawn patrol', '', '', 'eldora',
+    (d + interval '3 days 7 hours') at time zone 'America/Denver', (d + interval '3 days 9 hours') at time zone 'America/Denver', false);
+  assert (select event_id from public.rides where id = (select id from ev where name = 'r3')) is null, 'ride off the new day unlinked';
+  assert (select cancelled_at from public.rides where id = (select id from ev where name = 'r3')) is null, 'ride untouched';
+
+  assert (select event_id from public.rides where id = (select id from ev where name = 'r2')) = (select id from ev where name = 'M'), 'r2 linked';
+  perform public.cancel_community_event((select id from ev where name = 'M'));
+  assert exists (select 1 from public.rides where id = (select id from ev where name = 'r2') and cancelled_at is null and event_id is null),
+    'ride kept, unlinked, when its event is cancelled';
+end $$;
+
 reset role;
 
 select 'ALL COMMUNITY EVENT TESTS PASSED' as result;
