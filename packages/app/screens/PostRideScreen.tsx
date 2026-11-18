@@ -175,6 +175,7 @@ export function PostRideScreen({ initialResort, editRideId, initialCommunity }: 
         notes: notes.trim().slice(0, 280),
         contact: contact.trim().slice(0, 60),
         communityId,
+        eventId: null,
       };
       if (editRideId) {
         // Keep the exact original times when the picker didn't change them.

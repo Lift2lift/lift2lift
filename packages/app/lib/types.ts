@@ -58,6 +58,9 @@ export type BoardRide = {
   communityName: string | null;
   /** Requests waiting on the driver. They hold seats (counted in seatsTaken) but aren't in riderIds yet. */
   seatsPending: number;
+  /** The club event this ride goes to, if any. */
+  eventId: string | null;
+  eventTitle: string | null;
   /** Your seat on this ride, if you have one: a request ('pending') or a booking the driver confirmed. */
   myStatus: SeatStatus | null;
   myLegs: SeatLegs | null;
@@ -263,6 +266,8 @@ export type NewRide = {
   contact: string;
   /** null = everyone on Lift2Lift; otherwise only that community's members. */
   communityId: string | null;
+  /** The club event this ride goes to (needs communityId to match), or null. */
+  eventId: string | null;
 };
 
 /** A ride as the driver edits it, plus what's already booked. */
@@ -284,7 +289,28 @@ export type Community = {
   upcomingRides: number;
   /** Requests to join waiting for an admin (0 for members). */
   pendingRequests: number;
+  /** The soonest upcoming event, or null. */
+  nextEvent: { id: string; title: string; startsAt: string } | null;
 };
+
+/** An event on a community's calendar. */
+export type CommunityEvent = {
+  id: string;
+  communityId: string;
+  title: string;
+  description: string;
+  location: string;
+  resortId: string | null;
+  startsAt: string; // ISO
+  endsAt: string; // ISO
+  allDay: boolean;
+  source: 'manual' | 'ics';
+  going: number;
+  iAmIn: boolean;
+  goingPeople: Person[];
+  rideCount: number;
+};
+export type NewCommunityEvent = Pick<CommunityEvent, 'title' | 'description' | 'location' | 'resortId' | 'startsAt' | 'endsAt' | 'allDay'>;
 
 /** A community in Popular communities, with where you stand. */
 export type PopularCommunity = {
@@ -407,6 +433,13 @@ export interface Api {
   /** A brand-new code: name the community and become its admin. */
   setupCommunity(code: string, name: string, description: string): Promise<JoinCommunityResult>;
   communityPage(communityId: string): Promise<CommunityPage>;
+  /** Events overlapping the days fromDay..toDay (YYYY-MM-DD). */
+  communityEvents(communityId: string, fromDay: string, toDay: string): Promise<CommunityEvent[]>;
+  setEventRsvp(eventId: string, going: boolean): Promise<void>;
+  /** Admins only. Returns the new event's id. */
+  createCommunityEvent(communityId: string, event: NewCommunityEvent): Promise<string>;
+  updateCommunityEvent(eventId: string, event: NewCommunityEvent): Promise<void>;
+  cancelCommunityEvent(eventId: string): Promise<void>;
   leaveCommunity(communityId: string): Promise<void>;
   /** Admins only. */
   updateCommunity(communityId: string, name: string, description: string): Promise<void>;
