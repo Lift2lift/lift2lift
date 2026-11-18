@@ -268,3 +268,232 @@ left join lateral (
   where rv.reviewee_id = r.driver_id and rv.reviewee_role = 'driver'
 ) rt on true
 where r.cancelled_at is null and coalesce(r.return_at, r.depart_at) > now() - interval '2 hours';
+
+-- Unlinking a ride from its event (event moved or cancelled) must never be blocked
+-- or announced: an update whose only change is event_id going to null skips the
+-- ride rules, the driver checks and the "ride changed" chat line. Each function is
+-- the latest earlier definition plus that one early return.
+create or replace function public.enforce_ride_rules()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_cap int;
+  v_name text;
+  v_taken int;
+  v_label text;
+  v_booked boolean := false;
+begin
+  -- Unlinking a ride from its event changes nothing else, so it skips every check.
+  if tg_op = 'UPDATE' and new.event_id is null and old.event_id is not null
+     and to_jsonb(new) - 'event_id' = to_jsonb(old) - 'event_id' then
+    return new;
+  end if;
+  -- Round trips default to coming back 8 hours later (the app always sends a time).
+  if new.trip_type = 'round_trip' and new.return_at is null then
+    new.return_at := new.depart_at + interval '8 hours';
+  elsif new.trip_type <> 'round_trip' then
+    new.return_at := null;
+    new.return_meet := '';
+  end if;
+
+  new.ride_date := (new.depart_at at time zone 'America/Denver')::date;
+
+  if tg_op = 'INSERT' or new.depart_at is distinct from old.depart_at then
+    if new.depart_at < now() + interval '2 hours' then
+      raise exception 'Rides have to leave at least 2 hours from now so riders can book ahead.' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if new.cancelled_at is not null then
+    return new; -- cancelling is always allowed
+  end if;
+
+  if tg_op = 'UPDATE' then
+    v_booked := exists (select 1 from public.ride_seats where ride_id = new.id);
+
+    -- Finished rides stay as they were.
+    if coalesce(old.return_at, old.depart_at) < now() then
+      raise exception 'This ride is over, so it can''t be edited.' using errcode = 'P0001';
+    end if;
+
+    -- A new time for the ride back still has to give people time to get there.
+    if new.return_at is distinct from old.return_at and new.return_at is not null
+       and new.return_at < now() + interval '30 minutes' then
+      raise exception 'The ride back has to leave at least 30 minutes from now.' using errcode = 'P0001';
+    end if;
+
+    -- Once someone's booked, the mountain and the day are what they signed up
+    -- for, and gas money can only go down.
+    if v_booked and new.resort_id is distinct from old.resort_id then
+      raise exception 'Riders already booked this trip, so the mountain can''t change. Cancel it and post a new ride instead.' using errcode = 'P0001';
+    end if;
+    if v_booked and new.ride_date is distinct from old.ride_date then
+      raise exception 'Riders are booked for %, so the ride can''t move to another day. You can still change the time.',
+        to_char(old.ride_date, 'FMDay, Mon FMDD') using errcode = 'P0001';
+    end if;
+    if v_booked and new.gas_per_rider > old.gas_per_rider then
+      raise exception 'Riders already agreed to $% for gas. You can lower it, but not raise it.', old.gas_per_rider using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- Trip type can't change once someone has a seat.
+  if tg_op = 'UPDATE' and new.trip_type is distinct from old.trip_type
+     and exists (select 1 from public.ride_seats where ride_id = new.id) then
+    raise exception 'Riders already booked this trip, so it can''t switch between one way and round trip.' using errcode = 'P0001';
+  end if;
+
+  -- Gas cap: a full car can't add up to more than the legal maximum.
+  v_cap := public.trip_gas_cap(new.resort_id, new.depart_at, new.trip_type);
+  if new.gas_per_rider * new.seats_total > v_cap then
+    select name into v_name from public.resorts where id = new.resort_id;
+    v_label := case when new.trip_type = 'round_trip' then 'a round trip to' else 'a one-way trip to' end;
+    raise exception 'Colorado caps gas money for % % at $% total. With % seat%, ask at most $% per rider.',
+      v_label, v_name, v_cap, new.seats_total, case when new.seats_total = 1 then '' else 's' end, floor(v_cap / new.seats_total)
+      using errcode = 'P0001';
+  end if;
+
+  -- Can't drop below the seats already claimed on either leg.
+  if tg_op = 'UPDATE' then
+    select greatest(
+      count(*) filter (where 'to' = any (public.seat_legs(new.trip_type, s.legs))),
+      count(*) filter (where 'from' = any (public.seat_legs(new.trip_type, s.legs))))
+    into v_taken from public.ride_seats s where s.ride_id = new.id;
+    if new.seats_total < v_taken then
+      raise exception '% riders already have seats. Remove someone before lowering the seat count.', v_taken using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- One trip per driver per day, and no riding the same day.
+  perform pg_advisory_xact_lock(hashtextextended(new.driver_id::text, 43127));
+
+  if exists (
+    select 1 from public.rides r
+    where r.driver_id = new.driver_id and r.ride_date = new.ride_date
+      and r.cancelled_at is null and r.id <> new.id
+  ) then
+    raise exception 'You already have a ride posted that day. Colorado allows one trip per driver per day.' using errcode = 'P0001';
+  end if;
+
+  if exists (
+    select 1 from public.ride_seats s
+    join public.rides r on r.id = s.ride_id
+    where s.rider_id = new.driver_id and r.ride_date = new.ride_date
+      and r.cancelled_at is null and r.id <> new.id
+  ) then
+    raise exception 'You have a seat in someone else''s car that day. It''s one ride per person per day, so bail on that seat first.' using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.enforce_verified_driver()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  -- Unlinking a ride from its event changes nothing else, so it skips every check.
+  if tg_op = 'UPDATE' and new.event_id is null and old.event_id is not null
+     and to_jsonb(new) - 'event_id' = to_jsonb(old) - 'event_id' then
+    return new;
+  end if;
+  if new.cancelled_at is not null then
+    return new;
+  end if;
+  if not public.is_profile_ready(new.driver_id) then
+    raise exception 'Set up your profile first: a verified selfie, a few details and your interests. It takes about two minutes.'
+      using errcode = 'P0001';
+  end if;
+  if not public.is_verified_driver(new.driver_id) then
+    raise exception 'Add your insurance card before hosting. It takes about a minute in Account → Driver verification.'
+      using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.announce_ride_changes()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_first text;
+  v_parts text[] := '{}';
+  v_body text;
+  fmt constant text := 'FMHH12:MI AM';
+begin
+  -- Unlinking a ride from its event changes nothing else, so it skips every check.
+  if tg_op = 'UPDATE' and new.event_id is null and old.event_id is not null
+     and to_jsonb(new) - 'event_id' = to_jsonb(old) - 'event_id' then
+    return null;
+  end if;
+  if not exists (select 1 from public.ride_seats where ride_id = new.id) then
+    return null;
+  end if;
+
+  select coalesce(nullif(split_part(trim(full_name), ' ', 1), ''), 'Your driver') into v_first
+  from public.profiles where id = new.driver_id;
+
+  if new.cancelled_at is not null and old.cancelled_at is null then
+    v_body := v_first || ' cancelled this ride.';
+  elsif new.cancelled_at is null then
+    if new.depart_at is distinct from old.depart_at then
+      v_parts := array_append(v_parts,
+        (case when new.trip_type = 'from_mountain' then 'leaves the mountain at ' else 'leaves at ' end) ||
+        to_char(new.depart_at at time zone 'America/Denver', fmt) ||
+        ' (was ' || to_char(old.depart_at at time zone 'America/Denver', fmt) || ')');
+    end if;
+    if new.return_at is distinct from old.return_at and new.return_at is not null then
+      v_parts := array_append(v_parts, 'heads back at ' || to_char(new.return_at at time zone 'America/Denver', fmt) ||
+        coalesce(' (was ' || to_char(old.return_at at time zone 'America/Denver', fmt) || ')', ''));
+    end if;
+    if new.leave_from is distinct from old.leave_from then
+      v_parts := array_append(v_parts, 'meet at ' || new.leave_from);
+    end if;
+    if new.return_meet is distinct from old.return_meet and new.return_meet <> '' then
+      v_parts := array_append(v_parts, 'the ride back meets at ' || new.return_meet);
+    end if;
+    if new.gas_per_rider is distinct from old.gas_per_rider then
+      v_parts := array_append(v_parts, case when new.gas_per_rider = 0 then 'the ride is now free'
+        else 'gas is now $' || new.gas_per_rider || ' (was $' || old.gas_per_rider || ')' end);
+    end if;
+    if new.seats_total is distinct from old.seats_total then
+      v_parts := array_append(v_parts, new.seats_total || ' seat' || case when new.seats_total = 1 then '' else 's' end || ' total');
+    end if;
+    if new.gear is distinct from old.gear then
+      v_parts := array_append(v_parts, 'gear: ' || new.gear);
+    end if;
+    if new.contact is distinct from old.contact then
+      v_parts := array_append(v_parts, 'new contact: ' || new.contact);
+    end if;
+    if new.notes is distinct from old.notes then
+      v_parts := array_append(v_parts, 'updated the notes');
+    end if;
+    if cardinality(v_parts) > 0 then
+      v_body := v_first || ' changed the ride: ' || array_to_string(v_parts, ', ') || '.';
+    end if;
+  end if;
+
+  if v_body is not null then
+    insert into public.ride_messages (ride_id, sender_id, body, kind)
+    values (new.id, new.driver_id, left(v_body, 1000), 'update');
+  end if;
+
+  -- New times: send that leg's reminders again on the new schedule.
+  if new.depart_at is distinct from old.depart_at then
+    delete from public.ride_notifications_sent
+    where ride_id = new.id and leg = case when new.trip_type = 'from_mountain' then 'from' else 'to' end;
+  end if;
+  if new.return_at is distinct from old.return_at then
+    delete from public.ride_notifications_sent where ride_id = new.id and leg = 'from';
+  end if;
+  return null;
+end;
+$$;

@@ -314,6 +314,121 @@ begin
     'ride kept, unlinked, when its event is cancelled';
 end $$;
 
+-- Unlinking never gets in the way: finished rides, lapsed drivers, no chatter.
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+  v_id uuid;
+begin
+  insert into ev values ('F', public.create_community_event((select id from ev where name = 'club'), 'Event F', '', '', 'eldora',
+    (d + interval '10 days 7 hours') at time zone 'America/Denver', (d + interval '10 days 9 hours') at time zone 'America/Denver', false));
+  insert into ev values ('G', public.create_community_event((select id from ev where name = 'club'), 'Event G', '', '', 'eldora',
+    (d + interval '12 days 7 hours') at time zone 'America/Denver', (d + interval '12 days 9 hours') at time zone 'America/Denver', false));
+  insert into ev values ('H', public.create_community_event((select id from ev where name = 'club'), 'Event H', '', '', 'eldora',
+    (d + interval '14 days 7 hours') at time zone 'America/Denver', (d + interval '14 days 9 hours') at time zone 'America/Denver', false));
+end $$;
+
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000c1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+  v_id uuid;
+begin
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '10 days 7 hours') at time zone 'America/Denver', (d + interval '10 days 15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', (select id from ev where name = 'club'), (select id from ev where name = 'F'))
+  returning id into v_id;
+  insert into ev values ('f1', v_id);
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '12 days 7 hours') at time zone 'America/Denver', (d + interval '12 days 15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', (select id from ev where name = 'club'), (select id from ev where name = 'G'))
+  returning id into v_id;
+  insert into ev values ('g1', v_id);
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '14 days 7 hours') at time zone 'America/Denver', (d + interval '14 days 15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', (select id from ev where name = 'club'), (select id from ev where name = 'H'))
+  returning id into v_id;
+  insert into ev values ('h1', v_id);
+end $$;
+
+-- 1. A finished ride: backdate it as the owner, then the admin cancels its event.
+reset role;
+alter table public.rides disable trigger rides_enforce_rules;
+alter table public.rides disable trigger rides_event;
+update public.rides set depart_at = now() - interval '5 hours', return_at = now() - interval '1 hour',
+  ride_date = (now() at time zone 'America/Denver')::date where id = (select id from ev where name = 'f1');
+alter table public.rides enable trigger rides_event;
+alter table public.rides enable trigger rides_enforce_rules;
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+begin
+  perform public.cancel_community_event((select id from ev where name = 'F'));
+  assert exists (select 1 from public.rides where id = (select id from ev where name = 'f1') and cancelled_at is null and event_id is null),
+    'finished ride kept and unlinked when its event is cancelled';
+end $$;
+-- 4. A normal edit of that finished ride still fails.
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000c1', false);
+do $$
+begin
+  begin
+    update public.rides set notes = 'late edit' where id = (select id from ev where name = 'f1');
+    raise exception 'FAIL: edited a finished ride';
+  exception when raise_exception then
+    assert sqlerrm = 'This ride is over, so it can''t be edited.', sqlerrm;
+  end;
+end $$;
+
+-- 2. Cal's verification lapses; moving the event still unlinks his ride.
+reset role;
+update public.driver_verifications set status = 'rejected' where user_id = 'e5000000-0000-4000-8000-0000000000c1';
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+  v_id uuid;
+begin
+  perform public.update_community_event((select id from ev where name = 'G'), 'Event G', '', '', 'eldora',
+    (d + interval '13 days 7 hours') at time zone 'America/Denver', (d + interval '13 days 9 hours') at time zone 'America/Denver', false);
+  assert (select event_id from public.rides where id = (select id from ev where name = 'g1')) is null, 'lapsed driver: ride unlinked';
+end $$;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000c1', false);
+do $$
+begin
+  begin
+    update public.rides set notes = 'edit' where id = (select id from ev where name = 'g1');
+    raise exception 'FAIL: lapsed driver edited a ride';
+  exception when raise_exception then
+    assert sqlerrm like 'Set up your profile first%' or sqlerrm like 'Add your insurance card%', sqlerrm;
+  end;
+end $$;
+reset role;
+update public.driver_verifications set status = 'submitted' where user_id = 'e5000000-0000-4000-8000-0000000000c1';
+
+-- 3. A ride with a rider: unlinking adds no chat line and queues nothing.
+insert into public.ride_seats (ride_id, rider_id) values ((select id from ev where name = 'h1'), 'e5000000-0000-4000-8000-0000000000a1');
+create temp table before_counts as
+  select (select count(*) from public.ride_messages) as msgs, (select count(*) from public.ride_notifications_sent) as notes;
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+  v_id uuid;
+begin
+  perform public.update_community_event((select id from ev where name = 'H'), 'Event H', '', '', 'eldora',
+    (d + interval '15 days 7 hours') at time zone 'America/Denver', (d + interval '15 days 9 hours') at time zone 'America/Denver', false);
+  assert (select event_id from public.rides where id = (select id from ev where name = 'h1')) is null, 'booked ride unlinked';
+end $$;
+reset role;
+do $$
+begin
+  assert (select count(*) from public.ride_messages) = (select msgs from before_counts), 'no chat line for an unlink';
+  assert (select count(*) from public.ride_notifications_sent) = (select notes from before_counts), 'no notification for an unlink';
+end $$;
+
 reset role;
 
 select 'ALL COMMUNITY EVENT TESTS PASSED' as result;
