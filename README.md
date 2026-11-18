@@ -228,6 +228,23 @@ select cron.schedule('send-ride-reminders', '* * * * *', $$
 $$);
 ```
 
+**Club calendars**
+
+Club admins paste the ICS link of their Google, Outlook or iCloud calendar, and `supabase/functions/sync-community-calendars` copies its events into the club's events. It runs every 15 minutes (all clubs with a link) and when an admin taps Sync now. The server fetches whatever link an admin pastes, so only calendar hosts are allowed: `calendar.google.com`, `outlook.office365.com`, `outlook.office.com`, `outlook.live.com` and `*.icloud.com`, over https only. Any other host is refused, redirects are checked the same way, and a download stops after 10 seconds or 2 MB. If a feed fails, the events already stored stay and the admin sees one plain line. A cron run stops starting new clubs after about 50 seconds; the next run picks up the rest.
+
+```bash
+npx supabase functions deploy sync-community-calendars --no-verify-jwt   # uses the same CRON_SECRET as above
+```
+
+```sql
+select cron.schedule('sync-community-calendars', '*/15 * * * *', $$
+  select net.http_post(
+    url := 'https://vpkxesucfaofwazqgpni.supabase.co/functions/v1/sync-community-calendars',
+    headers := jsonb_build_object('Authorization', 'Bearer <your CRON_SECRET>')
+  );
+$$);
+```
+
 The iPhone app asks to allow notifications the first time someone has a booked ride. Pushes need a real device and an EAS build with a push key (`eas credentials`); they don't arrive in the iOS Simulator.
 
 **Lock-screen countdown**: a regular push shows a fixed message (“Leaving in 2 hours … at 7:40 AM”). A countdown that ticks on the lock screen is an iOS **Live Activity**, which needs a native widget extension (for example with `expo-apple-targets`) and a development build, so it won't run in Expo Go. The countdown inside the app works today. Live Activities are the next step if you want it on the lock screen too.

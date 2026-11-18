@@ -1,7 +1,7 @@
 // Run with: node --test supabase/functions/sync-community-calendars/logic.test.ts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ALLOWED_HOSTS, calendarUrlProblem, eventsFromIcs, guessResort, normalizeCalendarUrl } from './logic.ts';
+import { ALLOWED_HOSTS, calendarUrlProblem, eventsFromIcs, fetchCalendar, guessResort, normalizeCalendarUrl, parseCalendar } from './logic.ts';
 
 const NOW = new Date('2026-11-17T12:00:00Z');
 const BAD = 'Use a Google, Outlook or iCloud calendar link.';
@@ -392,4 +392,102 @@ test('guessResort', () => {
   assert.equal(guessResort('Eldora opening', resorts), 'eldora');
   assert.equal(guessResort('', resorts), null);
   assert.equal(guessResort('Copper', []), null);
+});
+
+// ---------- parseCalendar ----------
+test('parseCalendar: truncated only when the time budget runs out', () => {
+  const heavy: string[][] = [];
+  for (let i = 0; i < 5; i++) heavy.push(ev(`UID:b${i}`, 'SUMMARY:Heavy', 'DTSTART:20200101T150000Z', 'RRULE:FREQ=SECONDLY'));
+  assert.equal(parseCalendar(cal(...heavy), NOW, resorts, 1).truncated, true);
+  const normal = parseCalendar(cal(ev('UID:n', 'SUMMARY:Normal', 'DTSTART:20261201T150000Z')), NOW, resorts);
+  assert.equal(normal.truncated, false);
+  assert.equal(normal.events.length, 1);
+  const capped = parseCalendar(cal(ev('UID:c', 'SUMMARY:Daily', 'DTSTART:20261118T150000Z', 'RRULE:FREQ=HOURLY')), NOW, resorts, 5000);
+  assert.equal(capped.events.length, 500);
+  assert.equal(capped.truncated, false);
+});
+
+// ---------- fetchCalendar ----------
+const GOOD = 'https://calendar.google.com/calendar/ical/abc/public/basic.ics';
+const FAILED = { message: 'Could not read that calendar link' };
+type Call = { url: string; init: RequestInit };
+const stub = (...responses: (Response | Error)[]) => {
+  const calls: Call[] = [];
+  const fn = (async (url: any, init: any) => {
+    calls.push({ url: String(url), init });
+    const r = responses.shift();
+    if (!r) throw new Error('unexpected request');
+    if (r instanceof Error) throw r;
+    return r;
+  }) as typeof fetch;
+  return { fn, calls };
+};
+const redirect = (location: string | null, status = 302) =>
+  new Response(null, { status, headers: location ? { location } : {} });
+const streamOf = (chunks: Uint8Array[]) =>
+  new ReadableStream<Uint8Array>({
+    start(c) {
+      for (const x of chunks) c.enqueue(x);
+      c.close();
+    },
+  });
+
+test('fetchCalendar returns the text of a 200', async () => {
+  const s = stub(new Response('BEGIN:VCALENDAR\r\nEND:VCALENDAR'));
+  assert.equal(await fetchCalendar(GOOD, s.fn), 'BEGIN:VCALENDAR\r\nEND:VCALENDAR');
+});
+test('fetchCalendar sends a manual, credential-free request', async () => {
+  const s = stub(new Response('x'));
+  await fetchCalendar(GOOD, s.fn);
+  const { init } = s.calls[0];
+  assert.equal(init.redirect, 'manual');
+  assert.equal(init.method, 'GET');
+  const names = Object.keys(init.headers as Record<string, string>).map((h) => h.toLowerCase()).sort();
+  assert.deepEqual(names, ['accept', 'user-agent']);
+});
+test('fetchCalendar follows allowed and relative redirects', async () => {
+  const s = stub(redirect('/other.ics'), redirect('https://outlook.office365.com/x.ics', 301), new Response('ok'));
+  assert.equal(await fetchCalendar(GOOD, s.fn), 'ok');
+  assert.deepEqual(s.calls.map((c) => c.url), [GOOD, 'https://calendar.google.com/other.ics', 'https://outlook.office365.com/x.ics']);
+});
+test('fetchCalendar refuses a redirect to another host without requesting it', async () => {
+  for (const bad of ['https://evil.example.com/x.ics', 'http://calendar.google.com/x.ics', 'https://169.254.169.254/', 'https://calendar.google.com:8443/x.ics']) {
+    const s = stub(redirect(bad), new Response('leak'));
+    await assert.rejects(fetchCalendar(GOOD, s.fn), FAILED);
+    assert.equal(s.calls.length, 1);
+  }
+});
+test('fetchCalendar rejects a redirect without Location and a fourth redirect', async () => {
+  await assert.rejects(fetchCalendar(GOOD, stub(redirect(null)).fn), FAILED);
+  const s = stub(redirect('/1'), redirect('/2'), redirect('/3'), redirect('/4'), new Response('ok'));
+  await assert.rejects(fetchCalendar(GOOD, s.fn), FAILED);
+  assert.equal(s.calls.length, 4);
+  assert.equal(await fetchCalendar(GOOD, stub(redirect('/1'), redirect('/2'), redirect('/3'), new Response('ok')).fn), 'ok');
+});
+test('fetchCalendar refuses a disallowed first URL with zero requests', async () => {
+  const s = stub(new Response('x'));
+  await assert.rejects(fetchCalendar('https://evil.example.com/a.ics', s.fn), FAILED);
+  assert.equal(s.calls.length, 0);
+});
+test('fetchCalendar rejects an oversized Content-Length without reading', async () => {
+  let pulled = false;
+  const body = new ReadableStream<Uint8Array>({ pull() { pulled = true; } }, { highWaterMark: 0 });
+  const res = new Response(body, { status: 200, headers: { 'content-length': String(2 * 1024 * 1024 + 1) } });
+  await assert.rejects(fetchCalendar(GOOD, stub(res).fn), FAILED);
+  assert.equal(pulled, false);
+});
+test('fetchCalendar rejects a streamed body over 2 MB and accepts exactly 2 MB', async () => {
+  const chunk = new Uint8Array(512 * 1024).fill(65);
+  await assert.rejects(fetchCalendar(GOOD, stub(new Response(streamOf([chunk, chunk, chunk, chunk, new Uint8Array(1)]))).fn), FAILED);
+  const ok = await fetchCalendar(GOOD, stub(new Response(streamOf([chunk, chunk, chunk, chunk]))).fn);
+  assert.equal(ok.length, 2 * 1024 * 1024);
+});
+test('fetchCalendar rejects invalid UTF-8, empty bodies and non-200 statuses', async () => {
+  await assert.rejects(fetchCalendar(GOOD, stub(new Response(new Uint8Array([0xff, 0xfe, 0xfd]))).fn), FAILED);
+  await assert.rejects(fetchCalendar(GOOD, stub(new Response(null, { status: 200 })).fn), FAILED);
+  await assert.rejects(fetchCalendar(GOOD, stub(new Response('nope', { status: 500 })).fn), FAILED);
+  await assert.rejects(fetchCalendar(GOOD, stub(new Response('nope', { status: 404 })).fn), FAILED);
+});
+test('fetchCalendar maps a thrown fetch error to the generic message', async () => {
+  await assert.rejects(fetchCalendar(GOOD, stub(new Error('secret detail https://x')).fn), FAILED);
 });

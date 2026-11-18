@@ -179,8 +179,20 @@ function impossibleRule(rrule: any): boolean {
 
 /** `budgetMs` is a work budget (a duration, not a date): when it runs out, expansion stops and what was found so far is returned. */
 export function eventsFromIcs(ics: string, now: Date, resorts: Resort[], budgetMs = DEFAULT_BUDGET_MS): SyncEvent[] {
+  return parseCalendar(ics, now, resorts, budgetMs).events;
+}
+
+/** Like eventsFromIcs, but says whether expansion stopped because the time budget ran out (the 500-event cap does not count). A truncated list is partial: never store it as a success. */
+export function parseCalendar(ics: string, now: Date, resorts: Resort[], budgetMs = DEFAULT_BUDGET_MS): { events: SyncEvent[]; truncated: boolean } {
   const deadline = Date.now() + budgetMs;
-  const outOfTime = () => Date.now() > deadline;
+  let truncated = false;
+  const outOfTime = () => {
+    if (Date.now() > deadline) {
+      truncated = true;
+      return true;
+    }
+    return false;
+  };
   let root: any;
   try {
     const jcal = ICAL.parse(ics);
@@ -342,8 +354,82 @@ export function eventsFromIcs(ics: string, now: Date, resorts: Resort[], budgetM
       });
       if (out.length >= MAX_EVENTS) break;
     }
-    return out;
+    return { events: out, truncated };
   } finally {
     ICAL.TimezoneService.reset();
   }
+}
+
+// ---------------------------------------------------------------- fetching
+
+const FETCH_FAILED = 'Could not read that calendar link';
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_REDIRECTS = 3;
+const FETCH_TIMEOUT_MS = 10_000;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Fetches a calendar with every guard: allowed hosts checked before each request (redirects are followed by hand),
+ * at most 3 redirects, one 10 second deadline for everything, a 2 MB body cap, UTF-8 text only, final status 200.
+ * Sends no credentials. Every failure rejects with the same generic Error; nothing about the response leaks.
+ */
+export async function fetchCalendar(url: string, fetchFn: typeof fetch = fetch): Promise<string> {
+  const fail = () => new Error(FETCH_FAILED);
+  try {
+    const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    let current = normalizeCalendarUrl(url);
+    for (let hop = 0; ; hop++) {
+      if (calendarUrlProblem(current) !== null) throw fail();
+      const res = await fetchFn(current, {
+        method: 'GET',
+        redirect: 'manual',
+        credentials: 'omit',
+        signal,
+        headers: { Accept: 'text/calendar, text/plain;q=0.9, */*;q=0.1', 'User-Agent': 'Lift2Lift-Calendar-Sync' },
+      });
+      if (REDIRECT_STATUSES.has(res.status)) {
+        await res.body?.cancel().catch(() => {});
+        const location = res.headers.get('location');
+        if (!location || hop >= MAX_REDIRECTS) throw fail();
+        current = new URL(location, current).toString();
+        continue;
+      }
+      if (res.status !== 200) {
+        await res.body?.cancel().catch(() => {});
+        throw fail();
+      }
+      return await readBody(res, fail);
+    }
+  } catch {
+    throw new Error(FETCH_FAILED);
+  }
+}
+
+async function readBody(res: Response, fail: () => Error): Promise<string> {
+  const declared = res.headers.get('content-length');
+  if (declared !== null && Number(declared) > MAX_BODY_BYTES) {
+    await res.body?.cancel().catch(() => {});
+    throw fail();
+  }
+  if (!res.body) throw fail();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw fail();
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder('utf-8', { fatal: true }).decode(all);
 }

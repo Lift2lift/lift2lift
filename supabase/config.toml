@@ -82,6 +82,11 @@ verify_jwt = false
 [functions.send-ride-reminders]
 verify_jwt = false
 
+# Called every 15 minutes by pg_cron with CRON_SECRET, and by club admins for "Sync now" with their user JWT.
+# verify_jwt is off because the function checks its own auth: the cron secret, or a user who is an admin of the community.
+[functions.sync-community-calendars]
+verify_jwt = false
+
 # Live drive times with traffic for the Mountains tab (Mapbox, MAPBOX_TOKEN).
 [functions.drive-times]
 verify_jwt = true
