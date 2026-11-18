@@ -106,7 +106,7 @@ export function EventHero({
           <Text style={{ color: t.headerInk, fontSize: 14, fontWeight: '700' }}>{goingText}</Text>
         </View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 6 }}>
           {over ? null : (
             <Pressable
               onPress={onToggleIn}
@@ -123,7 +123,7 @@ export function EventHero({
               {busy ? (
                 <ActivityIndicator color={event.iAmIn ? t.accent : t.accentInk} />
               ) : (
-                <Text style={{ color: event.iAmIn ? t.accent : t.accentInk, fontSize: 15, fontWeight: '800' }}>{event.iAmIn ? 'You are in ✓' : 'I am in'}</Text>
+                <Text style={{ color: event.iAmIn ? t.accent : t.accentInk, fontSize: 15, fontWeight: '800' }}>{event.iAmIn ? 'You are going ✓' : 'I am going'}</Text>
               )}
             </Pressable>
           )}
@@ -140,38 +140,38 @@ export function EventHero({
           <Pressable onPress={onOfferRide} accessibilityRole="button" style={({ pressed }) => ({ ...btn, borderColor: edge, opacity: pressed ? 0.85 : 1 })}>
             <Text style={{ color: t.headerInk, fontSize: 15, fontWeight: '800' }}>Offer a ride</Text>
           </Pressable>
+          {/* Admin only, same row, pushed to the far side. */}
+          {canEdit ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+              {confirmCancel ? (
+                <>
+                  <Pressable onPress={() => setConfirmCancel(false)} accessibilityRole="button" style={({ pressed }) => ({ ...small, borderColor: edge, opacity: pressed ? 0.85 : 1 })}>
+                    <Text style={{ color: t.headerInk, fontSize: 14, fontWeight: '800' }}>Keep it</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      setConfirmCancel(false);
+                      onCancel();
+                    }}
+                    accessibilityRole="button"
+                    style={({ pressed }) => ({ ...small, borderColor: t.danger, opacity: pressed ? 0.85 : 1 })}
+                  >
+                    <Text style={{ color: t.danger, fontSize: 14, fontWeight: '800' }}>Yes, cancel</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Pressable onPress={onEdit} accessibilityRole="button" style={({ pressed }) => ({ ...small, borderColor: edge, opacity: pressed ? 0.85 : 1 })}>
+                    <Text style={{ color: t.headerInk, fontSize: 14, fontWeight: '800' }}>Edit</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setConfirmCancel(true)} accessibilityRole="button" style={({ pressed }) => ({ ...small, borderColor: t.danger, opacity: pressed ? 0.85 : 1 })}>
+                    <Text style={{ color: t.danger, fontSize: 14, fontWeight: '800' }}>Cancel event</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          ) : null}
         </View>
-
-        {canEdit ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-            {confirmCancel ? (
-              <>
-                <Pressable onPress={() => setConfirmCancel(false)} accessibilityRole="button" style={({ pressed }) => ({ ...small, borderColor: edge, opacity: pressed ? 0.85 : 1 })}>
-                  <Text style={{ color: t.headerInk, fontSize: 14, fontWeight: '800' }}>Keep it</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setConfirmCancel(false);
-                    onCancel();
-                  }}
-                  accessibilityRole="button"
-                  style={({ pressed }) => ({ ...small, borderColor: t.danger, opacity: pressed ? 0.85 : 1 })}
-                >
-                  <Text style={{ color: t.danger, fontSize: 14, fontWeight: '800' }}>Yes, cancel</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Pressable onPress={onEdit} accessibilityRole="button" style={({ pressed }) => ({ ...small, borderColor: edge, opacity: pressed ? 0.85 : 1 })}>
-                  <Text style={{ color: t.headerInk, fontSize: 14, fontWeight: '800' }}>Edit</Text>
-                </Pressable>
-                <Pressable onPress={() => setConfirmCancel(true)} accessibilityRole="button" style={({ pressed }) => ({ ...small, borderColor: t.danger, opacity: pressed ? 0.85 : 1 })}>
-                  <Text style={{ color: t.danger, fontSize: 14, fontWeight: '800' }}>Cancel event</Text>
-                </Pressable>
-              </>
-            )}
-          </View>
-        ) : null}
       </View>
 
       {open ? (

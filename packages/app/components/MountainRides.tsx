@@ -6,7 +6,7 @@ import { PASS_LABEL, passesFor } from '../lib/passes';
 import { RESORT_BY_ID } from '../lib/resorts';
 import type { BoardRide } from '../lib/types';
 
-/** Member rides that are not tied to an event, one tile per mountain; the picked tile's rides show below. */
+/** Member rides that are not tied to an event, one tile per mountain. Rides stay hidden until a tile is tapped; a second tap hides them. */
 export function MountainRides({
   title,
   note,
@@ -21,14 +21,14 @@ export function MountainRides({
   const t = useTheme();
   const [picked, setPicked] = useState<string | null>(null);
   const list = groups.map((g) => g.resortId).join(',');
-  // Start over on the first tile when the set of mountains changes (another day, another month).
+  // Close the open tile when the set of mountains changes (another day, another month).
   const [seen, setSeen] = useState(list);
   if (seen !== list) {
     setSeen(list);
     setPicked(null);
   }
   if (!groups.length) return null;
-  const current = groups.find((g) => g.resortId === picked) ?? groups[0];
+  const current = groups.find((g) => g.resortId === picked) ?? null;
 
   return (
     <View style={{ gap: 10 }}>
@@ -50,9 +50,9 @@ export function MountainRides({
           return (
             <Pressable
               key={g.resortId}
-              onPress={() => setPicked(g.resortId)}
+              onPress={() => setPicked(on ? null : g.resortId)}
               accessibilityRole="button"
-              accessibilityState={{ selected: on }}
+              accessibilityState={{ selected: on, expanded: on }}
               accessibilityLabel={`${name}, ${pill}, ${g.seatsOpen} ${sub}`}
               style={({ pressed }) => ({
                 width: 158,
@@ -87,9 +87,11 @@ export function MountainRides({
           );
         })}
       </ScrollView>
-      {current.rides.map((r) => (
-        <View key={r.id}>{renderRide(r)}</View>
-      ))}
+      {current ? (
+        current.rides.map((r) => <View key={r.id}>{renderRide(r)}</View>)
+      ) : (
+        <Text style={{ color: t.muted, fontSize: 13 }}>Tap a mountain to see its rides.</Text>
+      )}
     </View>
   );
 }

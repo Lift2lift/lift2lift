@@ -14,7 +14,7 @@ Clubs already keep a Google or Outlook calendar. They should not retype it, so e
 
 - A community page led by the next club event, with a month calendar beside it.
 - Club events are first-class: title, time, place, optional mountain, single or multi-day.
-- Members say "I am in" and see how many are going.
+- Members say "I am going" and see how many are going.
 - A ride can be posted to an event. The event shows its rides.
 - Members-only rides with no event still show for the selected day, grouped by mountain.
 - An admin connects a Google or Outlook calendar by pasting its ICS link. Events sync on a schedule.
@@ -139,7 +139,7 @@ All in `packages/app`. The mockup is the reference for layout and copy.
 
 **Day panel** shows the selected day. It opens on the next upcoming event; with no upcoming events it opens on today.
 
-- Event day: a hero in the header colors with a kicker ("Next up · in 4 days" for the next event, otherwise "Club event · in N days", or "Today"), dates, title, time and place, going avatars and count, **I am in** (toggles), and **Find a ride · N** when the event has rides. Tapping it reveals the rides to that event; hidden by default.
+- Event day: a hero in the header colors with a kicker ("Next up · in 4 days" for the next event, otherwise "Club event · in N days", or "Today"), dates, title, time and place, going avatars and count, **I am going** (toggles), and **Find a ride · N** when the event has rides. Tapping it reveals the rides to that event; hidden by default.
 - A multi-day event shows its date range, and its rides show their day.
 - Below: **Member rides, by mountain** for that day, only when there are rides without an event. Mountain tiles reuse the look of `Tile` in `components/MountainsHome.tsx` (rank, yellow ride pill, seats open). Picking a tile lists that mountain's rides as standard `RideCard`s. The first tile is picked by default.
 - A day with nothing shows a dashed empty state with "Post a ride for <day>". Any other day shows a small "+ Post a ride for <day>" button under the member rides.
