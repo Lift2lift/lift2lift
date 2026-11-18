@@ -326,6 +326,8 @@ export type JoinRequest = Person & { requestedAt: string };
 
 export type CommunityMember = Person & { role: CommunityRole; joinedAt: string };
 
+export type CommunityCalendar = { icsUrl: string; lastSyncedAt: string | null; lastError: string | null };
+
 export type CommunityPage = {
   id: string;
   name: string;
@@ -440,6 +442,12 @@ export interface Api {
   createCommunityEvent(communityId: string, event: NewCommunityEvent): Promise<string>;
   updateCommunityEvent(eventId: string, event: NewCommunityEvent): Promise<void>;
   cancelCommunityEvent(eventId: string): Promise<void>;
+  /** Admins only: the club calendar link and how its last sync went, or null when none is set. */
+  communityCalendar(communityId: string): Promise<CommunityCalendar | null>;
+  /** Admins only. A null or empty link disconnects the calendar. Rejects for a link that isn't Google, Outlook or iCloud. */
+  setCommunityCalendar(communityId: string, url: string | null): Promise<void>;
+  /** Imports the calendar's events now. Rejects with a message fit to show. */
+  syncCommunityCalendar(communityId: string): Promise<void>;
   leaveCommunity(communityId: string): Promise<void>;
   /** Admins only. */
   updateCommunity(communityId: string, name: string, description: string): Promise<void>;

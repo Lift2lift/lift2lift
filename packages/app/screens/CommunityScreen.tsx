@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
+import { ClubCalendarCard } from '../components/ClubCalendarCard';
 import { CommunityMembers } from '../components/CommunityMembers';
 import { EventCalendar } from '../components/EventCalendar';
 import { EventForm } from '../components/EventForm';
@@ -10,7 +11,7 @@ import { MountainRides } from '../components/MountainRides';
 import { RideCard } from '../components/RideCard';
 import { SetupModal } from '../components/SetupModal';
 import { Button, Card, FormScreen, Label, Loading, Notice } from '../components/ui';
-import { addDays, isoDay, longDay, MON, parseDay } from '../lib/dates';
+import { addDays, isoDay, longDay, MON, parseDay, timeAgo } from '../lib/dates';
 import { dayMarks, eventDays, eventOn, initialDay, isMultiDay, kicker, memberRidesByMountain, nextEvent, ridesForEvent } from '../lib/events';
 import { useCompact } from '../lib/layout';
 import { useTheme } from '../lib/theme';
@@ -246,7 +247,9 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
       <FormScreen header={<AppHeader />} wide>
         <BackLink label={`‹ ${page.name}`} onPress={() => nav.replace('/community', { id: page.id })} />
         {notice}
-        <CommunityMembers page={page} me={me} onChanged={load} onMessage={(text, kind) => setMessage(text === null ? null : { text, kind: kind ?? 'success' })} />
+        <CommunityMembers page={page} me={me} onChanged={load} onMessage={(text, kind) => setMessage(text === null ? null : { text, kind: kind ?? 'success' })}>
+          {page.myRole === 'admin' ? <ClubCalendarCard communityId={page.id} onSynced={() => void loadEvents()} /> : null}
+        </CommunityMembers>
       </FormScreen>
     );
   }
@@ -300,7 +303,7 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
                     <Text numberOfLines={1} style={{ color: t.ink, fontSize: 15, fontWeight: '700' }}>
                       {q.name || 'Lift2Lift member'}
                     </Text>
-                    <Text style={{ color: t.muted, fontSize: 12 }}>Asked {askedAgo(q.requestedAt)} · tap to see their profile</Text>
+                    <Text style={{ color: t.muted, fontSize: 12 }}>Asked {timeAgo(q.requestedAt)} · tap to see their profile</Text>
                   </View>
                 </Pressable>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -388,17 +391,6 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
       </View>
     </FormScreen>
   );
-}
-
-/** "just now", "3 hours ago", "2 days ago". */
-function askedAgo(iso: string) {
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 2) return 'just now';
-  if (mins < 60) return `${mins} minutes ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-  const days = Math.round(hours / 24);
-  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
 }
 
 function BackLink({ label = '‹ Communities', onPress }: { label?: string; onPress?: () => void }) {

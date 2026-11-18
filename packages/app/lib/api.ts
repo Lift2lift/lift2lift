@@ -414,6 +414,27 @@ export function createApi(supabase: SupabaseClient): Api {
         })),
       } satisfies CommunityPage;
     },
+    async communityCalendar(communityId) {
+      const { data } = check(await supabase.rpc('community_calendar', { p_community_id: communityId }));
+      if (!data) return null;
+      const d = data as { ics_url: string; last_synced_at: string | null; last_error: string | null };
+      return { icsUrl: d.ics_url, lastSyncedAt: d.last_synced_at, lastError: d.last_error };
+    },
+    async setCommunityCalendar(communityId, url) {
+      check(await supabase.rpc('set_community_calendar', { p_community_id: communityId, p_url: url }));
+    },
+    async syncCommunityCalendar(communityId) {
+      const generic = "Couldn't sync the calendar. Try again.";
+      let result: { ok?: boolean; error?: unknown } | null = null;
+      try {
+        const { data, error } = await supabase.functions.invoke('sync-community-calendars', { body: { community_id: communityId } });
+        if (!error) result = data as { ok?: boolean; error?: unknown } | null;
+      } catch {
+        // fall through to the generic message
+      }
+      if (result?.ok === true) return;
+      throw new Error(result?.ok === false && typeof result.error === 'string' && result.error ? result.error : generic);
+    },
     async communityEvents(communityId, fromDay, toDay) {
       const { data } = check(await supabase.rpc('community_events', { p_community_id: communityId, p_from: fromDay, p_to: toDay }));
       type P = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null };

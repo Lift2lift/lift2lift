@@ -61,3 +61,14 @@ export function driveText(minutes: number) {
 export function nextSaturday(from = new Date()) {
   return isoDay(addDays(from, (6 - from.getDay() + 7) % 7 || 7));
 }
+
+/** "just now", "5 minutes ago", "3 hours ago", "2 days ago". */
+export function timeAgo(iso: string, now = Date.now()) {
+  const mins = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+}
