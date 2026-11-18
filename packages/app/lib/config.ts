@@ -29,7 +29,7 @@ export const PICKUP_SPOTS = [
 export const GEAR_OPTIONS = ['Skis and boards fit', 'Roof box / rack', 'Boards only', 'Small bags only'];
 
 /** Public website. The privacy policy and terms live at /privacy and /terms (App Store Connect needs the privacy URL). */
-export const SITE_URL = 'https://lift2lift.vercel.app';
+export const SITE_URL = 'https://www.lift2lift.net';
 
 /**
  * Where people (and App Review) reach a human. Shown in the privacy policy,
