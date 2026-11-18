@@ -3,7 +3,8 @@ import { Pressable, Text, View } from 'react-native';
 import { formatCode, shareOrCopy } from '../lib/communities';
 import { useTheme } from '../lib/theme';
 import type { CommunityMember, CommunityPage } from '../lib/types';
-import { useApi, useNav } from '../providers';
+import { useApi, useDevice, useNav } from '../providers';
+import { CommunityBadge } from '../screens/CommunitiesScreen';
 import { Avatar } from './Avatar';
 import { Button, Card, Field, Label, Notice } from './ui';
 
@@ -30,6 +31,7 @@ export function CommunityMembers({
   const t = useTheme();
   const api = useApi();
   const nav = useNav();
+  const device = useDevice();
 
   const admin = page.myRole === 'admin';
   const [editing, setEditing] = useState(false);
@@ -50,6 +52,21 @@ export function CommunityMembers({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function changePhoto() {
+    onMessage(null);
+    let photo;
+    try {
+      photo = await device.pickPhoto();
+    } catch (e) {
+      return onMessage((e as Error).message, 'error');
+    }
+    if (!photo) return;
+    await run(async () => {
+      await api.setCommunityPhoto(page.id, photo);
+      await onChanged();
+    }, 'Photo updated.');
   }
 
   const otherAdmins = page.members.filter((m) => m.role === 'admin' && m.id !== me).length;
@@ -149,6 +166,31 @@ export function CommunityMembers({
       {admin ? (
         <View style={{ gap: 8 }}>
           <Label>Admin</Label>
+          <Card style={{ padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <CommunityBadge name={page.name} photoUrl={page.photoUrl} size={64} />
+            <View style={{ flex: 1, minWidth: 160, gap: 2 }}>
+              <Text style={{ color: t.ink, fontSize: 15, fontWeight: '800' }}>Community photo</Text>
+              <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>
+                Shows on the community page and in Popular communities. A square logo works best.
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {page.photoUrl ? (
+                <Button
+                  small
+                  variant="ghost"
+                  title="Remove"
+                  onPress={() =>
+                    run(async () => {
+                      await api.setCommunityPhoto(page.id, null);
+                      await onChanged();
+                    }, 'Photo removed.')
+                  }
+                />
+              ) : null}
+              <Button small variant="ghost" title={page.photoUrl ? 'Change photo' : 'Add photo'} loading={busy} onPress={changePhoto} />
+            </View>
+          </Card>
           {children}
           {editing ? (
             <Card style={{ padding: 14, gap: 12 }}>

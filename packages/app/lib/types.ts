@@ -289,6 +289,8 @@ export type Community = {
   id: string;
   name: string;
   description: string;
+  /** Signed link to the community's profile picture, or null. */
+  photoUrl: string | null;
   /** The 9-character code. Admins only (null for members): admins send it out as an invite. */
   code: string | null;
   role: CommunityRole;
@@ -326,6 +328,7 @@ export type PopularCommunity = {
   id: string;
   name: string;
   description: string;
+  photoUrl: string | null;
   memberCount: number;
   upcomingRides: number;
   myStatus: 'member' | 'requested' | 'none';
@@ -355,6 +358,7 @@ export type CommunityPage = {
   id: string;
   name: string;
   description: string;
+  photoUrl: string | null;
   /** Admins only. */
   code: string | null;
   listed: boolean;
@@ -482,6 +486,8 @@ export interface Api {
   leaveCommunity(communityId: string): Promise<void>;
   /** Admins only. */
   updateCommunity(communityId: string, name: string, description: string): Promise<void>;
+  /** Admins only. Uploads a new profile picture for the community, or removes it with null. */
+  setCommunityPhoto(communityId: string, photo: PickedPhoto | null): Promise<void>;
   removeCommunityMember(communityId: string, userId: string): Promise<void>;
   setCommunityRole(communityId: string, userId: string, role: CommunityRole): Promise<void>;
   /** Makes a new code; the old one stops working. Returns the new code. */

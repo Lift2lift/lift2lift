@@ -272,7 +272,7 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
       <BackLink />
 
       <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
-        <CommunityBadge name={page.name} size={56} />
+        <CommunityBadge name={page.name} photoUrl={page.photoUrl} size={56} />
         <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 0, gap: 2 }}>
           <Text style={{ color: t.ink, fontSize: 28, fontWeight: '900', textTransform: 'uppercase' }} accessibilityRole="header">
             {page.name}
@@ -282,7 +282,7 @@ export function CommunityScreen({ communityId, welcome, view }: { communityId?: 
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button small variant="ghost" title="Members" onPress={() => nav.replace('/community', { id: page.id, view: 'members' })} />
+          <Button small variant="ghost" title={admin ? 'Members & settings' : 'Members'} onPress={() => nav.replace('/community', { id: page.id, view: 'members' })} />
           {admin ? <Button small variant="ghost" title="+ Add event" onPress={() => setFormFor('new')} /> : null}
         </View>
       </View>
