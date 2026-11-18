@@ -87,6 +87,11 @@ verify_jwt = false
 [functions.sync-community-calendars]
 verify_jwt = false
 
+# Google sign-in for club calendars. Google's redirect back carries no user token, so the function checks
+# its own auth: a one-time state for the redirect, an admin of the community for every POST.
+[functions.google-calendar]
+verify_jwt = false
+
 # Live drive times with traffic for the Mountains tab (Mapbox, MAPBOX_TOKEN).
 [functions.drive-times]
 verify_jwt = true

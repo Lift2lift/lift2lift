@@ -1,4 +1,5 @@
-// Pure core of sync-community-calendars: link check and ICS text to events. No network, no Deno APIs.
+// Pure core of sync-community-calendars: link check, ICS text to events, Google API events to events.
+// No network (except fetchCalendar, which takes its fetch), no Deno APIs.
 // Keep calendarUrlProblem at least as strict as calendar_url_ok in the community_calendars migration.
 import ICAL from 'ical.js';
 
@@ -344,32 +345,138 @@ export function parseCalendar(ics: string, now: Date, resorts: Resort[], budgetM
       }
     }
 
-    const inWindow = candidates
-      .filter((c) => c.endMs > windowStart && c.startMs < windowEnd)
-      .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs || (a.baseUid < b.baseUid ? -1 : a.baseUid > b.baseUid ? 1 : 0));
-
-    const seen = new Map<string, number>();
-    const out: SyncEvent[] = [];
-    for (const c of inWindow) {
-      const base = `${c.baseUid}|${c.keyDate}`;
-      const n = (seen.get(base) ?? 0) + 1;
-      seen.set(base, n);
-      out.push({
-        uid: n === 1 ? base : `${base}|${n}`,
-        title: Array.from(c.title).length < 2 ? 'Club event' : c.title,
-        description: c.description,
-        location: c.location,
-        resort_id: guessResort(`${c.location} ${c.title}`, resorts),
-        starts_at: new Date(c.startMs).toISOString(),
-        ends_at: new Date(c.endMs).toISOString(),
-        all_day: c.allDay,
-      });
-      if (out.length >= MAX_EVENTS) break;
-    }
-    return { events: out, truncated };
+    return { events: finishCandidates(candidates, windowStart, windowEnd, resorts), truncated };
   } finally {
     ICAL.TimezoneService.reset();
   }
+}
+
+/**
+ * Candidates in the window, sorted, keyed `uid|Denver date` (plus `|2`, `|3` for more on one day), at most 500.
+ * Shared by the ICS and Google paths so both key occurrences the same way.
+ */
+function finishCandidates(candidates: Candidate[], windowStart: number, windowEnd: number, resorts: Resort[]): SyncEvent[] {
+  const inWindow = candidates
+    .filter((c) => c.endMs > windowStart && c.startMs < windowEnd)
+    .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs || (a.baseUid < b.baseUid ? -1 : a.baseUid > b.baseUid ? 1 : 0));
+
+  const seen = new Map<string, number>();
+  const out: SyncEvent[] = [];
+  for (const c of inWindow) {
+    const base = `${c.baseUid}|${c.keyDate}`;
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    out.push({
+      uid: n === 1 ? base : `${base}|${n}`,
+      title: Array.from(c.title).length < 2 ? 'Club event' : c.title,
+      description: c.description,
+      location: c.location,
+      resort_id: guessResort(`${c.location} ${c.title}`, resorts),
+      starts_at: new Date(c.startMs).toISOString(),
+      ends_at: new Date(c.endMs).toISOString(),
+      all_day: c.allDay,
+    });
+    if (out.length >= MAX_EVENTS) break;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- Google Calendar API
+
+type GoogleTime = { date?: string; dateTime?: string; timeZone?: string };
+/** The fields of a Calendar API v3 event that the sync reads (events.list with singleEvents=true). */
+export type GoogleEvent = {
+  id?: string;
+  iCalUID?: string;
+  status?: string;
+  eventType?: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: GoogleTime;
+  end?: GoogleTime;
+  originalStartTime?: GoogleTime;
+  recurringEventId?: string;
+};
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+/** Google sends descriptions as HTML. Line breaks stay, tags go, entities are decoded. */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/\s*(p|div|li|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+      if (e[0] === '#') {
+        const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
+      }
+      return ENTITIES[e.toLowerCase()] ?? m;
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** The Denver date of a Google start (all-day `date`, or the date of a `dateTime` instant). Null if unreadable. */
+function googleDate(t: GoogleTime | undefined): string | null {
+  if (t?.date && DATE_ONLY.test(t.date)) return t.date;
+  const ms = t?.dateTime ? Date.parse(t.dateTime) : NaN;
+  return Number.isFinite(ms) ? denverDate(ms) : null;
+}
+
+/**
+ * Calendar API events (already expanded: one item per occurrence) to the same events the ICS path makes.
+ * Uids are `iCalUID|<Denver date of the original start>`, like ICS occurrences. All-day ends are exclusive
+ * in Google, as in ICS, and are stored the same way. Cancelled items and non-default types (out of office,
+ * focus time, working location, birthdays) are skipped.
+ */
+export function eventsFromGoogle(items: GoogleEvent[], now: Date, resorts: Resort[]): SyncEvent[] {
+  const windowStart = now.getTime() - DAY;
+  const windowEnd = now.getTime() + 180 * DAY;
+  const candidates: Candidate[] = [];
+  for (const item of items) {
+    try {
+      if (!item || item.status === 'cancelled') continue;
+      if (item.eventType && item.eventType !== 'default') continue;
+      const baseUid = (typeof item.iCalUID === 'string' && item.iCalUID.trim()) || (typeof item.id === 'string' && item.id.trim()) || '';
+      if (!baseUid) continue;
+      const keyDate = googleDate(item.originalStartTime ?? item.start);
+      if (!keyDate) continue;
+
+      let startMs: number;
+      let endMs: number;
+      let allDay = false;
+      const startDate = item.start?.date;
+      if (startDate && DATE_ONLY.test(startDate)) {
+        allDay = true;
+        const endDate = item.end?.date && DATE_ONLY.test(item.end.date) ? item.end.date : null;
+        const span = endDate ? Math.max(0, daysBetween(startDate, endDate) - 1) : 0;
+        startMs = denverMidnight(startDate);
+        endMs = denverMidnight(addDays(startDate, span));
+      } else {
+        startMs = item.start?.dateTime ? Date.parse(item.start.dateTime) : NaN;
+        if (!Number.isFinite(startMs)) continue;
+        const end = item.end?.dateTime ? Date.parse(item.end.dateTime) : NaN;
+        endMs = Number.isFinite(end) ? Math.max(startMs, end) : startMs + HOUR;
+      }
+      candidates.push({
+        baseUid,
+        keyDate,
+        startMs,
+        endMs,
+        allDay,
+        title: cut(item.summary, 80),
+        description: cut(htmlToText(typeof item.description === 'string' ? item.description : ''), 1000),
+        location: cut(item.location, 120),
+      });
+    } catch {
+      // one bad event never stops the rest
+    }
+  }
+  return finishCandidates(candidates, windowStart, windowEnd, resorts);
 }
 
 // ---------------------------------------------------------------- fetching

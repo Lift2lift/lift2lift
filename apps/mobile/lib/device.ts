@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { decode } from 'base64-arraybuffer';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
+import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
@@ -71,6 +72,26 @@ export const nativeDevice: DeviceServices = {
   /** Stripe's hosted ID check in an in-app browser. Resolves when the person closes it. */
   async openIdentityCheck(url) {
     await WebBrowser.openBrowserAsync(url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET });
+  },
+
+  /** lift2lift://google-calendar in the app; an exp://…/--/google-calendar address in Expo Go. */
+  googleReturnTo() {
+    return Linking.createURL('google-calendar');
+  },
+
+  /** Google's sign-in in an auth session, which closes itself when Google sends the browser back to the app. */
+  async openGoogleSignIn(url, returnTo) {
+    const result = await WebBrowser.openAuthSessionAsync(url, returnTo);
+    if (result.type !== 'success') return null;
+    try {
+      return new URL(result.url).searchParams.get('google_calendar');
+    } catch {
+      return 'error';
+    }
+  },
+
+  takeGoogleResult() {
+    return null;
   },
 
   /** Camera or photo library, compressed to JPEG, read as bytes for Supabase Storage. */

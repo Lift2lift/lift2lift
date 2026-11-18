@@ -2,7 +2,7 @@ import { TERMS_VERSION } from './legal';
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, SeatRequest, SeatStatus, ChatMessage, Community, CommunityEvent, CommunityPage, CommunityRole, JoinCommunityResult, PopularCommunity, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
+import type { Api, BoardRide, SeatRequest, SeatStatus, ChatMessage, Community, CommunityEvent, CommunityPage, CommunityRole, GoogleCalendarChoice, JoinCommunityResult, PopularCommunity, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
 
 type BoardRow = {
   id: string;
@@ -170,6 +170,24 @@ export function createApi(supabase: SupabaseClient): Api {
   const listeners = new Set<(s: Session | null) => void>();
   let holdEvents = false; // true while a password reset is mid-flight
   const emit = (s: Session | null) => listeners.forEach((l) => l(s));
+
+  /** Calls the google-calendar function. Rejects with the function's own message (they are written to show). */
+  async function googleCalendarCall<T = unknown>(body: Record<string, string>): Promise<T | null> {
+    let message = "Couldn't reach Google. Try again.";
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar', { body });
+      if (!error) return data as T | null;
+      try {
+        const b = await (error as { context?: Response }).context?.json();
+        if (typeof b?.error === 'string' && b.error) message = b.error;
+      } catch {
+        // keep the default message
+      }
+    } catch {
+      // keep the default message
+    }
+    throw new Error(message);
+  }
 
   // People hidden from me (I blocked them, or they blocked me). Cached briefly, cleared on block changes.
   let hiddenCache: { ids: Promise<Set<string>>; until: number } | null = null;
@@ -417,8 +435,24 @@ export function createApi(supabase: SupabaseClient): Api {
     async communityCalendar(communityId) {
       const { data } = check(await supabase.rpc('community_calendar', { p_community_id: communityId }));
       if (!data) return null;
-      const d = data as { ics_url: string; last_synced_at: string | null; last_error: string | null };
-      return { icsUrl: d.ics_url, lastSyncedAt: d.last_synced_at, lastError: d.last_error };
+      const d = data as {
+        source: 'ics' | 'google' | null;
+        ics_url: string | null;
+        google_calendar_name: string | null;
+        google_email: string | null;
+        google_pending: boolean | null;
+        last_synced_at: string | null;
+        last_error: string | null;
+      };
+      return {
+        source: d.source ?? null,
+        icsUrl: d.ics_url ?? null,
+        googleCalendarName: d.google_calendar_name ?? null,
+        googleEmail: d.google_email ?? null,
+        googlePending: d.google_pending === true,
+        lastSyncedAt: d.last_synced_at,
+        lastError: d.last_error,
+      };
     },
     async setCommunityCalendar(communityId, url) {
       check(await supabase.rpc('set_community_calendar', { p_community_id: communityId, p_url: url }));
@@ -434,6 +468,21 @@ export function createApi(supabase: SupabaseClient): Api {
       }
       if (result?.ok === true) return;
       throw new Error(result?.ok === false && typeof result.error === 'string' && result.error ? result.error : generic);
+    },
+    async startGoogleCalendar(communityId, returnTo) {
+      const data = await googleCalendarCall<{ url?: string }>({ action: 'start', community_id: communityId, return_to: returnTo });
+      if (!data?.url) throw new Error("Couldn't reach Google. Try again.");
+      return data.url;
+    },
+    async googleCalendars(communityId) {
+      const data = await googleCalendarCall<{ calendars?: GoogleCalendarChoice[] }>({ action: 'calendars', community_id: communityId });
+      return data?.calendars ?? [];
+    },
+    async chooseGoogleCalendar(communityId, calendarId) {
+      await googleCalendarCall({ action: 'choose', community_id: communityId, calendar_id: calendarId });
+    },
+    async disconnectGoogleCalendar(communityId) {
+      await googleCalendarCall({ action: 'disconnect', community_id: communityId });
     },
     async communityEvents(communityId, fromDay, toDay) {
       const { data } = check(await supabase.rpc('community_events', { p_community_id: communityId, p_from: fromDay, p_to: toDay }));

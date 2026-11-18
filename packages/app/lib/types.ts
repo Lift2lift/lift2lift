@@ -241,6 +241,15 @@ export interface DeviceServices {
   pickPhoto(): Promise<PickedPhoto | null>;
   /** Opens Stripe's hosted ID check. On web this leaves the page; on iOS it resolves when the browser closes. */
   openIdentityCheck(url: string): Promise<void>;
+  /** Where Google sends the browser back after sign-in: this page on the web, the app's address on iOS. */
+  googleReturnTo(): string;
+  /**
+   * Opens Google's sign-in. On iOS it resolves with the result (`connected`, `denied` or `error`), or null
+   * if the person closed it. On the web the page leaves; the result comes back with takeGoogleResult.
+   */
+  openGoogleSignIn(url: string, returnTo: string): Promise<string | null>;
+  /** Web: the `google_calendar` result in this page's URL, removed from the URL once read. iOS: null. */
+  takeGoogleResult(): string | null;
   /** Asks to allow notifications and returns this phone's push token, or null (web, or declined). */
   registerForPush(): Promise<{ token: string; platform: 'ios' | 'android' | 'web' } | null>;
   /** The app icon for the opening screen: require('../assets/icon.png') on iOS, { uri: '/logo.png' } on the web. */
@@ -326,7 +335,21 @@ export type JoinRequest = Person & { requestedAt: string };
 
 export type CommunityMember = Person & { role: CommunityRole; joinedAt: string };
 
-export type CommunityCalendar = { icsUrl: string; lastSyncedAt: string | null; lastError: string | null };
+/**
+ * The admin card's view of a club calendar. `source` is null while someone has signed in with Google but
+ * not picked a calendar yet (`googlePending`). Never holds a token.
+ */
+export type CommunityCalendar = {
+  source: 'ics' | 'google' | null;
+  icsUrl: string | null;
+  googleCalendarName: string | null;
+  /** The Google account signed in for this club, if any. */
+  googleEmail: string | null;
+  googlePending: boolean;
+  lastSyncedAt: string | null;
+  lastError: string | null;
+};
+export type GoogleCalendarChoice = { id: string; name: string; primary: boolean };
 
 export type CommunityPage = {
   id: string;
@@ -448,6 +471,14 @@ export interface Api {
   setCommunityCalendar(communityId: string, url: string | null): Promise<void>;
   /** Imports the calendar's events now. Rejects with a message fit to show. */
   syncCommunityCalendar(communityId: string): Promise<void>;
+  /** Admins only. Google's sign-in page for this club; Google sends the browser back to `returnTo`. */
+  startGoogleCalendar(communityId: string, returnTo: string): Promise<string>;
+  /** Admins only. The signed-in Google account's calendars, primary first. */
+  googleCalendars(communityId: string): Promise<GoogleCalendarChoice[]>;
+  /** Admins only. Makes one of those the club calendar (run syncCommunityCalendar after). */
+  chooseGoogleCalendar(communityId: string, calendarId: string): Promise<void>;
+  /** Admins only. Revokes Google access and removes the Google calendar and what it imported. */
+  disconnectGoogleCalendar(communityId: string): Promise<void>;
   leaveCommunity(communityId: string): Promise<void>;
   /** Admins only. */
   updateCommunity(communityId: string, name: string, description: string): Promise<void>;

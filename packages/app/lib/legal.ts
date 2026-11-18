@@ -7,9 +7,9 @@
 import { SCHOOL_NAME, SITE_URL, SUPPORT_EMAIL } from './config';
 import { CARPOOL_DISCLAIMER } from './rules';
 
-export const LEGAL_UPDATED = 'November 10, 2026';
+export const LEGAL_UPDATED = 'November 18, 2026';
 /** Saved on the account at sign-up (auth user metadata terms_version). */
-export const TERMS_VERSION = '2026-11-10';
+export const TERMS_VERSION = '2026-11-18';
 
 export type LegalSection = { heading: string; body: string[] };
 export type LegalDoc = { title: string; intro: string; sections: LegalSection[] };
@@ -27,6 +27,7 @@ export const PRIVACY_POLICY: LegalDoc = {
         'Rides: rides you post or book, pickup spots and times, contact details you give riders, check-ins, and ride chat messages.',
         'Community: reviews you write and receive, friends, people you block, and reports you send.',
         'Device: a push notification token so we can send ride reminders, if you allow notifications.',
+        'Club calendars: if you are a club admin and connect a Google Calendar, the calendar data described in "Club calendars and Google data" below. A pasted calendar link is covered there too.',
         'We do not collect your location, contacts, browsing history or advertising identifiers.',
       ],
     },
@@ -37,6 +38,19 @@ export const PRIVACY_POLICY: LegalDoc = {
         'We keep only the result, the name on the license, and your selfie, which becomes your profile photo that other signed-in members can see. We do not store your license photo or the face scan, and we never use face data for anything other than this one check.',
         'Insurance card photos are read by Amazon Textract for the insurer name and expiry date. We keep those details, not the card photo.',
         'We never sell, rent or trade biometric data. Your profile photo is deleted when you delete your account or verify again with a new selfie.',
+      ],
+    },
+    {
+      heading: 'Club calendars and Google data (club admins)',
+      body: [
+        'Club admins can connect a Google Calendar so the club\'s events appear on its Lift2Lift page. This is optional, and only admins who choose "Connect Google Calendar" and sign in with Google are affected.',
+        'What we access, read-only: the list of calendars on your Google account (names and IDs), so you can pick the club calendar; the events on the one calendar you pick (title, description, location, start and end time, and whether it repeats or was cancelled), from one day ago to 180 days ahead; and your Google account email address, so other admins can see which account is connected. We never create, change or delete anything in your Google account, and we never read any calendar except the one you pick.',
+        'How we use it: the events on the calendar you pick are copied into your club\'s events, where members of your club can see them, say they\'re going and offer rides. The calendar list is shown only to you while you pick. That is the only use.',
+        'How we store it: Google gives us an access key (a refresh token) so we can check the calendar for changes about every 15 minutes. It is stored encrypted, is used only by our servers, and is never shown to anyone, including other admins.',
+        'Sharing: we do not sell Google user data, use it for advertising, or use it to train AI or machine learning models. We do not share it with anyone except our service providers (Supabase, which hosts our database), as needed to run this feature. People do not read it, except to fix a problem you ask us about, for security, or when the law requires it.',
+        'Disconnecting and deletion: tap Disconnect on the club calendar card, or remove Lift2Lift at myaccount.google.com/permissions. When the calendar is disconnected (also automatically if you stop being an admin, leave the club or delete your account), we delete the access key, revoke it at Google when we can, and remove the copied events that haven\'t started yet. Events already under way are cancelled, and past events stay in the club\'s history.',
+        'Calendar links: instead of signing in with Google, an admin can paste a calendar\'s sharing link (Google, Outlook or iCloud). We keep the link, which only that club\'s admins can see, read the calendar through it on the same schedule, and copy its events the same way. Removing the link removes the copied events the same way as disconnecting.',
+        'Lift2Lift\'s use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy (developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.',
       ],
     },
     {
@@ -57,14 +71,15 @@ export const PRIVACY_POLICY: LegalDoc = {
     {
       heading: 'Service providers',
       body: [
-        'Supabase (database, sign-in, file storage), Amazon Web Services (license, selfie and insurance checks), Expo and Apple (push notifications), and Vercel (website hosting). They process data only to provide their service to us.',
+        'Supabase (database, sign-in, file storage), Amazon Web Services (license, selfie and insurance checks), Expo and Apple (push notifications), Vercel (website hosting), and Google (the Calendar API, only for clubs whose admin connects a Google Calendar). They process data only to provide their service to us.',
         'We share information with law enforcement only when the law requires it or someone\'s safety is at risk.',
       ],
     },
     {
       heading: 'How long we keep it',
       body: [
-        'We keep your account data while your account is open. When you delete your account we delete your profile, photos, rides, seats, messages, reviews, friends, blocks, devices and verification results.',
+        'We keep your account data while your account is open. When you delete your account we delete your profile, photos, rides, seats, messages, reviews, friends, blocks, devices and verification results, and disconnect any Google Calendar you connected.',
+        'A connected Google Calendar\'s access key is kept only until it is disconnected. Copied club events stay with the club as described above.',
         'Reports you sent are kept, without your name, for up to two years so we can act on repeat abuse.',
       ],
     },
@@ -129,6 +144,14 @@ export const TERMS: LegalDoc = {
       body: [
         'You can report any profile, chat message or review, and block anyone. Blocking hides each of you from the other and stops you from booking a ride together.',
         'We review every report within 24 hours. We remove content that breaks these terms and suspend or delete the accounts that posted it.',
+      ],
+    },
+    {
+      heading: 'Club calendars',
+      body: [
+        'Club admins can connect a calendar (by Google sign-in or by pasting a calendar link) so its events show on the club\'s page. Only connect a calendar you are allowed to share with the club. Everything on it, within the next 180 days, will be visible to the club\'s members.',
+        'Events copied from a calendar can only be changed in that calendar. Lift2Lift reads it; it never writes to it. Your use of Google Calendar is also covered by Google\'s own terms.',
+        'You can disconnect at any time from the club calendar card. If you stop being an admin, leave the club or delete your account, a Google Calendar you connected is disconnected automatically.',
       ],
     },
     {
