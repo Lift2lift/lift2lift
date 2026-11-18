@@ -3,6 +3,7 @@ import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Button, Card, Field, FormScreen, Label, Loading, Muted, Notice } from '../components/ui';
 import { cleanCode, COMMUNITY_CODE_LENGTH, formatCode } from '../lib/communities';
+import { dayLabel, isoDay } from '../lib/dates';
 import { useTheme } from '../lib/theme';
 import type { Community, PopularCommunity } from '../lib/types';
 import { useApi, useNav } from '../providers';
@@ -237,6 +238,11 @@ export function CommunitiesScreen() {
                   <Text style={{ color: t.muted, fontSize: 13 }}>
                     {c.memberCount} {c.memberCount === 1 ? 'member' : 'members'} · {c.upcomingRides} upcoming {c.upcomingRides === 1 ? 'ride' : 'rides'}
                   </Text>
+                  {c.nextEvent ? (
+                    <Text numberOfLines={1} style={{ color: t.ink, fontSize: 13, fontWeight: '700' }}>
+                      Next: {c.nextEvent.title} · {dayLabel(isoDay(new Date(c.nextEvent.startsAt)))}
+                    </Text>
+                  ) : null}
                 </View>
                 {c.pendingRequests > 0 ? (
                   <View style={{ backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 }}>

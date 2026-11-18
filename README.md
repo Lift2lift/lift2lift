@@ -59,6 +59,7 @@ supabase/
   - **Community page:** upcoming rides, members (tap for profiles) and **Leave community**. Admins can rename it, make other admins, remove members and **Make a new code** (the old one stops working right away). If the last admin leaves or deletes their account, the longest-standing member takes over.
   - **Codes:** the first 50 ship in `supabase/migrations/20261114000013_communities.sql` as bcrypt hashes only (cost 12, about 0.2 seconds per guess), so the codes themselves aren't in this repo and can't be recovered from it by trying every code. The list of codes is kept outside the repo. Ten wrong codes in an hour locks code entry for that person for the hour.
 - **Private contact**: a driver's phone number or handle is only visible to the driver and to riders whose seat the driver confirmed.
+- **Community events**: a community's page opens on its events calendar. Admins add, edit and cancel events (a time, a place, optionally a mountain, one day or several). Members say they're in, see who else is going, and can find or offer a ride to an event: **Offer a ride** opens Post with the community, day and event chosen, and **For event** on Post lets a driver pick or change the event. Ride cards show the event as a tag, and the Communities tab shows each community's next event.
 - **Post a ride**: tap-to-pick mountain, day (calendar, up to 60 days out, with days you already have a ride faded), time, pickup spot, seats, gas and gear, with the forecast for the chosen day.
 - **Profiles**: the first time someone posts a ride or calls shotgun, a pop-up starts profile setup:
   1. **Photo**: scan their license and take a live selfie (Stripe Identity). The selfie is matched to the license photo and becomes their profile photo. People can't upload their own profile photo, so every photo is verified.
@@ -169,6 +170,8 @@ Sign in with a demo account, or create your own with any @colorado.edu address (
 | --- | --- | --- |
 | driver@lift2lift.test | password123 | 3 sample rides posted, driver verification approved |
 | rider@lift2lift.test | password123 | a seat on the A-Basin ride |
+
+Both demo accounts are in the CU Freeride community (the driver is its admin) with three sample events.
 
 When you sign up locally, the confirmation code goes to the local inbox at **http://127.0.0.1:54324**, not your real email. Supabase Studio, a database browser, runs at **http://127.0.0.1:54323**.
 

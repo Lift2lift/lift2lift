@@ -306,6 +306,13 @@ export function RideCard({
               </Text>
             </View>
           ) : null}
+          {ride.eventTitle ? (
+            <View style={{ backgroundColor: t.chip, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 }}>
+              <Text numberOfLines={1} style={{ color: t.ink, fontSize: 12, fontWeight: '800' }}>
+                {ride.eventTitle}
+              </Text>
+            </View>
+          ) : null}
           {friendIds?.has(ride.driverId) ? (
             <View style={{ backgroundColor: t.accent, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
               <Text style={{ color: t.accentInk, fontSize: 12, fontWeight: '800' }}>Your friend is driving</Text>
