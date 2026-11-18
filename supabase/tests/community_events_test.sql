@@ -54,7 +54,7 @@ begin
     perform public.create_community_event(v_club, 'Backwards', '', '', null, now() + interval '2 days', now() + interval '1 day', false);
     raise exception 'FAIL: ends before it starts';
   exception when raise_exception then
-    assert sqlerrm like '%end%', sqlerrm;
+    assert sqlerrm = 'The event can''t end before it starts.', sqlerrm;
   end;
   begin
     insert into public.community_events (community_id, title, starts_at, ends_at, created_by)
@@ -427,6 +427,57 @@ do $$
 begin
   assert (select count(*) from public.ride_messages) = (select msgs from before_counts), 'no chat line for an unlink';
   assert (select count(*) from public.ride_notifications_sent) = (select notes from before_counts), 'no notification for an unlink';
+end $$;
+
+-- Moving an event within days that still cover a ride keeps the ride's link.
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+begin
+  insert into ev values ('K', public.create_community_event((select id from ev where name = 'club'), 'Event K', '', '', 'eldora',
+    (d + interval '20 days 8 hours') at time zone 'America/Denver', (d + interval '22 days 16 hours') at time zone 'America/Denver', false));
+end $$;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000c1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+  v_id uuid;
+begin
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '21 days 7 hours') at time zone 'America/Denver', (d + interval '21 days 15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', (select id from ev where name = 'club'), (select id from ev where name = 'K'))
+  returning id into v_id;
+  insert into ev values ('k1', v_id);
+end $$;
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
+begin
+  -- D+20..D+22 becomes D+21..D+23: the ride's day (D+21) is still inside.
+  perform public.update_community_event((select id from ev where name = 'K'), 'Event K moved', '', '', 'eldora',
+    (d + interval '21 days 6 hours') at time zone 'America/Denver', (d + interval '23 days 16 hours') at time zone 'America/Denver', false);
+  assert (select event_id from public.rides where id = (select id from ev where name = 'k1')) = (select id from ev where name = 'K'),
+    'ride keeps its link when the event still covers its day';
+end $$;
+
+-- An outsider sees neither the community ride nor its event's title on the board.
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000d1', false);
+do $$
+begin
+  assert not exists (select 1 from public.ride_board where id = (select id from ev where name = 'k1')), 'outsider sees no community ride';
+  assert not exists (select 1 from public.ride_board where event_title is not null), 'outsider sees no event title';
+  assert not exists (select 1 from public.ride_board where event_title = 'Event K moved'), 'outsider sees no event title (by name)';
+end $$;
+
+-- Taking a linked ride out of its community unlinks it (the trigger clears event_id; it does not reject).
+select set_config('request.jwt.claim.sub', 'e5000000-0000-4000-8000-0000000000c1', false);
+do $$
+begin
+  assert (select event_title from public.ride_board where id = (select id from ev where name = 'k1')) = 'Event K moved', 'member sees the title';
+  update public.rides set community_id = null where id = (select id from ev where name = 'k1');
+  assert (select community_id is null and event_id is null and cancelled_at is null from public.rides where id = (select id from ev where name = 'k1')),
+    'open ride, unlinked, still up';
 end $$;
 
 reset role;

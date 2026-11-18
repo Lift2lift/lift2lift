@@ -2,8 +2,9 @@
 --
 -- * An admin saves the ICS link of the club's Google, Outlook or iCloud calendar.
 --   Only admins can read or set it. The table has no grants for app users.
--- * A server job (service role only) lists the links and hands the parsed events
---   back to apply_calendar_sync, which adds, updates and cancels imported events.
+-- * A server job (service role only) claims the least recently attempted links and
+--   hands the parsed events back to apply_calendar_sync, which adds, updates and
+--   cancels imported events.
 -- * Imported events keep their id when they change, so RSVPs and ride links stay.
 --   Rides that no longer fit an imported event are released.
 
@@ -12,6 +13,7 @@ create table public.community_calendars (
   ics_url text not null,
   last_synced_at timestamptz,
   last_error text,
+  last_attempt_at timestamptz, -- when a cron run last claimed this link; never-attempted links go first
   set_by uuid references public.profiles (id) on delete set null,
   set_at timestamptz not null default now()
 );
@@ -77,6 +79,7 @@ as $$
 declare
   v_url text := btrim(coalesce(p_url, ''));
   v_old text;
+  v_id uuid;
 begin
   if not public.is_community_admin(p_community_id) then
     raise exception 'Only community admins can set the calendar link.' using errcode = '42501';
@@ -84,28 +87,40 @@ begin
   -- Lock the row so this and a running sync take turns.
   select ics_url into v_old from public.community_calendars where community_id = p_community_id for update;
 
+  if v_url <> '' then
+    v_url := regexp_replace(v_url, '^[wW][eE][bB][cC][aA][lL][sS]?://', 'https://');
+    if not public.calendar_url_ok(v_url) then
+      raise exception 'Use a Google, Outlook or iCloud calendar link.' using errcode = 'P0001';
+    end if;
+    if v_old = v_url then
+      return;
+    end if;
+  end if;
+
+  -- The link is cleared or now points at a different calendar. What we imported from the old one:
+  -- not started yet, it goes; under way, it is cancelled (nobody could change or cancel it by hand
+  -- and no sync is left to) and its rides are released; already over, it stays as it was.
+  delete from public.community_events
+   where community_id = p_community_id and source = 'ics' and starts_at > now();
+  for v_id in
+    update public.community_events e
+       set cancelled_at = now(), updated_at = now()
+     where e.community_id = p_community_id and e.source = 'ics' and e.cancelled_at is null
+       and e.starts_at <= now() and not public.event_is_over(e.starts_at, e.ends_at, e.all_day)
+    returning e.id
+  loop
+    perform public.release_event_rides(v_id);
+  end loop;
+
   if v_url = '' then
-    delete from public.community_events
-     where community_id = p_community_id and source = 'ics' and starts_at > now();
     delete from public.community_calendars where community_id = p_community_id;
     return;
   end if;
 
-  v_url := regexp_replace(v_url, '^[wW][eE][bB][cC][aA][lL][sS]?://', 'https://');
-  if not public.calendar_url_ok(v_url) then
-    raise exception 'Use a Google, Outlook or iCloud calendar link.' using errcode = 'P0001';
-  end if;
-  if v_old = v_url then
-    return;
-  end if;
-
-  -- A different calendar: what we imported from the old one that hasn't started goes.
-  delete from public.community_events
-   where community_id = p_community_id and source = 'ics' and starts_at > now();
   insert into public.community_calendars (community_id, ics_url, set_by, set_at)
   values (p_community_id, v_url, auth.uid(), now())
   on conflict (community_id) do update
-    set ics_url = excluded.ics_url, last_synced_at = null, last_error = null,
+    set ics_url = excluded.ics_url, last_synced_at = null, last_error = null, last_attempt_at = null,
         set_by = excluded.set_by, set_at = excluded.set_at;
 end;
 $$;
@@ -113,14 +128,24 @@ $$;
 ------------------------------------------------------------------------------
 -- Sync (service role only)
 ------------------------------------------------------------------------------
-create function public.calendars_to_sync()
+-- Up to p_limit links for this cron run: least recently attempted first (never attempted before all),
+-- stamped as attempted in the same statement. Rows another run holds are skipped. Whatever a run does
+-- not get to keeps its new stamp and sorts behind the rest next time, so every club takes its turn.
+create function public.claim_calendars_to_sync(p_limit integer default 20)
 returns table (community_id uuid, ics_url text)
 language sql
-stable
 security definer
 set search_path = ''
 as $$
-  select c.community_id, c.ics_url from public.community_calendars c order by c.set_at;
+  update public.community_calendars c
+     set last_attempt_at = now()
+    from (select x.community_id
+            from public.community_calendars x
+           order by x.last_attempt_at asc nulls first, x.community_id
+           limit greatest(coalesce(p_limit, 20), 0)
+             for update skip locked) pick
+   where c.community_id = pick.community_id
+  returning c.community_id, c.ics_url;
 $$;
 
 create function public.apply_calendar_sync(p_community_id uuid, p_events jsonb, p_error text, p_url text default null)
@@ -231,7 +256,7 @@ revoke execute on function public.community_calendar(uuid) from public, anon;
 grant execute on function public.community_calendar(uuid) to authenticated;
 revoke execute on function public.set_community_calendar(uuid, text) from public, anon;
 grant execute on function public.set_community_calendar(uuid, text) to authenticated;
-revoke execute on function public.calendars_to_sync() from public, anon, authenticated;
-grant execute on function public.calendars_to_sync() to service_role;
+revoke execute on function public.claim_calendars_to_sync(integer) from public, anon, authenticated;
+grant execute on function public.claim_calendars_to_sync(integer) to service_role;
 revoke execute on function public.apply_calendar_sync(uuid, jsonb, text, text) from public, anon, authenticated;
 grant execute on function public.apply_calendar_sync(uuid, jsonb, text, text) to service_role;

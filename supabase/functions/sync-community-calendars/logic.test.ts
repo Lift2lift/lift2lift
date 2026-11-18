@@ -406,6 +406,18 @@ test('parseCalendar: truncated only when the time budget runs out', () => {
   assert.equal(capped.events.length, 500);
   assert.equal(capped.truncated, false);
 });
+test('parseCalendar: stopping at the candidate cap counts as truncated', () => {
+  // 40 hourly series fill the 20,000-candidate cap (500 each); the 41st series is never expanded.
+  const many: string[][] = [];
+  for (let i = 0; i < 40; i++) many.push(ev(`UID:h${i}`, 'SUMMARY:Hourly', 'DTSTART:20261118T000000Z', 'RRULE:FREQ=HOURLY'));
+  many.push(ev('UID:late', 'SUMMARY:Never reached', 'DTSTART:20261117T130000Z', 'RRULE:FREQ=WEEKLY'));
+  const out = parseCalendar(cal(...many), NOW, resorts, 60_000);
+  assert.equal(out.truncated, true);
+  // 39 series fit under the cap: full expansion, so the 500 cut alone is not truncation.
+  const fits = parseCalendar(cal(...many.slice(0, 39)), NOW, resorts, 60_000);
+  assert.equal(fits.events.length, 500);
+  assert.equal(fits.truncated, false);
+});
 
 // ---------- fetchCalendar ----------
 const GOOD = 'https://calendar.google.com/calendar/ical/abc/public/basic.ics';

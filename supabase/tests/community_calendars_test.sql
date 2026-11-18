@@ -120,8 +120,8 @@ begin
   exception when insufficient_privilege then null;
   end;
   begin
-    perform * from public.calendars_to_sync();
-    raise exception 'FAIL: authenticated listed calendars';
+    perform * from public.claim_calendars_to_sync();
+    raise exception 'FAIL: authenticated claimed calendars';
   exception when insufficient_privilege then null;
   end;
 end $$;
@@ -140,7 +140,7 @@ declare
   v_club uuid := (select id from cev where name = 'club');
   d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '5 days';
 begin
-  assert exists (select 1 from public.calendars_to_sync() where community_id = v_club
+  assert exists (select 1 from public.claim_calendars_to_sync() where community_id = v_club
                  and ics_url = 'https://calendar.google.com/calendar/ical/club/basic.ics'), 'listed for sync';
   perform public.apply_calendar_sync(v_club, jsonb_build_array(
     jsonb_build_object('uid', 'u-1', 'title', 'Season kickoff', 'description', 'Pizza', 'location', 'Brewery', 'resort_id', 'eldora',
@@ -263,6 +263,8 @@ begin
   perform public.set_community_calendar(v_club, 'https://outlook.office365.com/owa/calendar/a/b/calendar.ics');
   assert (select array_agg(ics_uid order by ics_uid) from public.community_events where community_id = v_club and source = 'ics') = array['u-3'],
     'new link removes imported events that have not started';
+  assert (select cancelled_at is not null from public.community_events where community_id = v_club and ics_uid = 'u-3'),
+    'new link cancels the imported event that is under way';
   assert public.community_calendar(v_club)->>'ics_url' = 'https://outlook.office365.com/owa/calendar/a/b/calendar.ics';
   assert public.community_calendar(v_club)->>'last_synced_at' is null, 'stamp reset';
 end $$;
@@ -364,6 +366,75 @@ begin
   assert (select event_id from public.rides where id = (select id from cev where name = 'ride2')) is null, 'cancel path releases the ride';
 end $$;
 
+-- Clearing the link: an imported event under way is cancelled and its ride released; one that is over stays.
+set role service_role;
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver');
+begin
+  perform public.apply_calendar_sync((select id from cev where name = 'club'), jsonb_build_array(
+    jsonb_build_object('uid', 'x-2', 'title', 'Fix two', 'starts_at', (d + interval '9 days 9 hours') at time zone 'America/Denver',
+      'ends_at', (d + interval '9 days 11 hours') at time zone 'America/Denver', 'all_day', false),
+    jsonb_build_object('uid', 'w-1', 'title', 'Week-long camp', 'starts_at', now() - interval '2 hours',
+      'ends_at', now() + interval '4 days', 'all_day', false),
+    jsonb_build_object('uid', 'w-old', 'title', 'Earlier clinic', 'starts_at', now() - interval '3 hours',
+      'ends_at', now() - interval '1 hour', 'all_day', false)), null);
+end $$;
+set role authenticated;
+select set_config('request.jwt.claim.sub', 'ca000000-0000-4000-8000-0000000000c1', false);
+do $$
+declare
+  d timestamp := date_trunc('day', now() at time zone 'America/Denver') + interval '2 days';
+  v_id uuid;
+begin
+  insert into public.rides (resort_id, trip_type, depart_at, return_at, return_meet, leave_from, seats_total, gas_per_rider, contact, community_id, event_id)
+  values ('eldora', 'round_trip', (d + interval '8 hours') at time zone 'America/Denver', (d + interval '15 hours') at time zone 'America/Denver',
+          'Base', 'Farrand Field', 3, 5, '303-555-0111', (select id from cev where name = 'club'),
+          (select id from public.community_events where ics_uid = 'w-1'))
+  returning id into v_id;
+  assert (select event_id from public.rides where id = v_id) is not null, 'linked to the camp';
+  insert into cev values ('ride3', v_id);
+end $$;
+select set_config('request.jwt.claim.sub', 'ca000000-0000-4000-8000-0000000000a1', false);
+do $$
+declare
+  v_club uuid := (select id from cev where name = 'club');
+  r jsonb;
+begin
+  perform public.set_community_calendar(v_club, null);
+  r := public.community_events(v_club, current_date - 1, current_date + 30);
+  assert not exists (select 1 from jsonb_array_elements(r) e where e->>'title' = 'Week-long camp'), 'under-way imported event no longer listed';
+  assert (select cancelled_at is not null from public.community_events where ics_uid = 'w-1'), 'under-way imported event cancelled';
+  assert (select event_id is null and cancelled_at is null from public.rides where id = (select id from cev where name = 'ride3')),
+    'its ride is kept and unlinked';
+  assert (select cancelled_at is null from public.community_events where ics_uid = 'w-old'), 'an imported event that is over stays as it was';
+  assert not exists (select 1 from public.community_events where ics_uid = 'x-2'), 'not started yet: removed';
+end $$;
+
+-- Cron claims: never attempted first, stamped, and the next claim takes the next one.
+reset role;
+insert into public.community_calendars (community_id, ics_url, last_attempt_at) values
+  ((select id from cev where name = 'club'), 'https://calendar.google.com/calendar/ical/club2/basic.ics', now() - interval '1 hour'),
+  ((select id from cev where name = 'other'), 'https://calendar.google.com/calendar/ical/other/basic.ics', null);
+set role service_role;
+do $$
+declare
+  v_club uuid := (select id from cev where name = 'club');
+  v_other uuid := (select id from cev where name = 'other');
+  v_ids uuid[];
+begin
+  select array_agg(community_id) into v_ids from public.claim_calendars_to_sync(1);
+  assert v_ids = array[v_other], 'never-attempted calendar first: ' || coalesce(v_ids::text, 'none');
+  assert (select last_attempt_at is not null from public.community_calendars where community_id = v_other), 'claimed row stamped';
+  assert (select last_attempt_at < now() - interval '30 minutes' from public.community_calendars where community_id = v_club), 'unclaimed row untouched';
+  select array_agg(community_id) into v_ids from public.claim_calendars_to_sync(1);
+  assert v_ids = array[v_club], 'then the least recently attempted: ' || coalesce(v_ids::text, 'none');
+  assert (select last_attempt_at = now() from public.community_calendars where community_id = v_club), 'second claim stamped';
+  assert (select count(*) from public.claim_calendars_to_sync()) = 2, 'default claims both';
+end $$;
+reset role;
+delete from public.community_calendars where community_id in ((select id from cev where name = 'club'), (select id from cev where name = 'other'));
+
 -- anon can run none of them.
 grant select on cev to anon;
 set role anon;
@@ -372,7 +443,9 @@ declare v_club uuid := (select id from cev where name = 'club');
 begin
   begin perform public.apply_calendar_sync(v_club, '[]'::jsonb, null); raise exception 'FAIL anon sync';
   exception when insufficient_privilege then null; end;
-  begin perform * from public.calendars_to_sync(); raise exception 'FAIL anon list';
+  begin perform * from public.claim_calendars_to_sync(); raise exception 'FAIL anon claim';
+  exception when insufficient_privilege then null; end;
+  begin perform * from public.claim_calendars_to_sync(1); raise exception 'FAIL anon claim one';
   exception when insufficient_privilege then null; end;
   begin perform public.community_calendar(v_club); raise exception 'FAIL anon read';
   exception when insufficient_privilege then null; end;

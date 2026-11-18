@@ -182,7 +182,11 @@ export function eventsFromIcs(ics: string, now: Date, resorts: Resort[], budgetM
   return parseCalendar(ics, now, resorts, budgetMs).events;
 }
 
-/** Like eventsFromIcs, but says whether expansion stopped because the time budget ran out (the 500-event cap does not count). A truncated list is partial: never store it as a success. */
+/**
+ * Like eventsFromIcs, but says whether expansion stopped early: the time budget ran out, or the feed hit
+ * MAX_CANDIDATES (which cuts by feed order, not by time). Cutting the sorted result to 500 events after a full
+ * expansion does not count. A truncated list is partial: never store it as a success.
+ */
 export function parseCalendar(ics: string, now: Date, resorts: Resort[], budgetMs = DEFAULT_BUDGET_MS): { events: SyncEvent[]; truncated: boolean } {
   const deadline = Date.now() + budgetMs;
   let truncated = false;
@@ -270,7 +274,11 @@ export function parseCalendar(ics: string, now: Date, resorts: Resort[], budgetM
     };
 
     for (const ve of masters) {
-      if (candidates.length >= MAX_CANDIDATES || outOfTime()) break;
+      if (candidates.length >= MAX_CANDIDATES) {
+        truncated = true; // masters left unexpanded
+        break;
+      }
+      if (outOfTime()) break;
       try {
         const uid = ve.getFirstPropertyValue('uid') as string;
         const mine = overrides.get(uid);
@@ -294,7 +302,11 @@ export function parseCalendar(ics: string, now: Date, resorts: Resort[], budgetM
         const floating = ICAL.Time.fromData({ year: start.wall.y, month: start.wall.mo, day: start.wall.d, hour: start.wall.h, minute: start.wall.mi, second: start.wall.s, isDate: start.isDate });
         const it = rrule.iterator(floating);
         let inWindow = 0;
-        for (let step = 0; step < MAX_STEPS && candidates.length < MAX_CANDIDATES && inWindow < MAX_EVENTS; step++) {
+        for (let step = 0; step < MAX_STEPS && inWindow < MAX_EVENTS; step++) {
+          if (candidates.length >= MAX_CANDIDATES) {
+            truncated = true; // this series was cut short
+            break;
+          }
           if (outOfTime()) break;
           const next = it.next();
           if (!next) break;

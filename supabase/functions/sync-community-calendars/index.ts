@@ -1,7 +1,8 @@
 // Copies each club's Google/Outlook/iCloud calendar into community events.
 //
 // Two ways in, one pipeline (syncOne):
-//   cron      Authorization: Bearer <CRON_SECRET>, every 15 minutes: syncs every community that has a link.
+//   cron      Authorization: Bearer <CRON_SECRET>, every 15 minutes: claims up to 20 communities, least recently
+//             attempted first, and syncs them.
 //   sync now  a signed-in club admin, POST { community_id }: syncs that one community.
 //
 // The server fetches a link an admin typed in, so every fetch goes through fetchCalendar (allowed hosts,
@@ -14,7 +15,8 @@ import { fetchCalendar, parseCalendar } from './logic.ts';
 const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
 const READ_FAILED = 'Could not read that calendar link';
 const TOO_LARGE = 'This calendar is too large to import';
-const CRON_BUDGET_MS = 50_000; // stop starting new communities after this; the next run picks up the rest
+const CRON_BATCH = 20; // communities claimed per cron run
+const CRON_BUDGET_MS = 50_000; // stop starting new communities after this; the claim order rotates them to the front
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Same ids and names as packages/app/lib/resorts.ts (RESORTS). Keep this list in sync with that file.
@@ -48,26 +50,27 @@ const RESORTS = [
 ];
 
 type Admin = ReturnType<typeof adminClient>;
-type Outcome = { ok: true } | { ok: false; error: string };
+type SyncResult = { ok: true } | { ok: false; error: typeof READ_FAILED | typeof TOO_LARGE };
+type Outcome = SyncResult | { ok: false; error: string };
 
 /**
  * The whole job for one community: fetch, parse, store. Used by both modes so they cannot drift.
  * `url` is the exact link that was read from the database; the database ignores the result if the link changed meanwhile.
- * Returns the outcome; the error text is only ever one of two fixed strings.
+ * Returns the outcome; the error text is only ever one of two fixed strings, the same one stored as last_error.
  */
-export async function syncOne(admin: Admin, communityId: string, url: string, fetchFn: typeof fetch = fetch): Promise<'ok' | 'failed'> {
+export async function syncOne(admin: Admin, communityId: string, url: string, fetchFn: typeof fetch = fetch): Promise<SyncResult> {
   const record = async (events: unknown[] | null, error: string | null) => {
     const { error: dbError } = await admin.rpc('apply_calendar_sync', { p_community_id: communityId, p_events: events, p_error: error, p_url: url });
     if (dbError) throw dbError;
   };
-  let failure: string | null = null;
+  let failure: typeof READ_FAILED | typeof TOO_LARGE = READ_FAILED;
   try {
     const text = await fetchCalendar(url, fetchFn);
     const { events, truncated } = parseCalendar(text, new Date(), RESORTS);
     if (truncated) failure = TOO_LARGE;
     else {
       await record(events, null);
-      return 'ok';
+      return { ok: true };
     }
   } catch (e) {
     console.error('calendar sync failed', communityId, e instanceof Error ? e.message : 'error');
@@ -78,7 +81,7 @@ export async function syncOne(admin: Admin, communityId: string, url: string, fe
   } catch (e) {
     console.error('calendar sync could not record failure', communityId, e instanceof Error ? e.message : 'error');
   }
-  return 'failed';
+  return { ok: false, error: failure };
 }
 
 async function sha256(s: string) {
@@ -100,9 +103,10 @@ Deno.serve(async (req) => {
 
   if (await isCron(req)) {
     const admin = adminClient();
-    const { data, error } = await admin.rpc('calendars_to_sync');
+    // Claims (and stamps last_attempt_at on) the least recently attempted calendars, so every club gets its turn.
+    const { data, error } = await admin.rpc('claim_calendars_to_sync', { p_limit: CRON_BATCH });
     if (error) {
-      console.error('calendars_to_sync', error.message);
+      console.error('claim_calendars_to_sync', error.message);
       return json(req, { error: 'Could not start the sync.' }, 500);
     }
     const rows = (data ?? []) as { community_id: string; ics_url: string }[];
@@ -116,7 +120,7 @@ Deno.serve(async (req) => {
         continue;
       }
       try {
-        if ((await syncOne(admin, row.community_id, row.ics_url)) === 'ok') synced += 1;
+        if ((await syncOne(admin, row.community_id, row.ics_url)).ok) synced += 1;
         else failed += 1;
       } catch (e) {
         console.error('calendar sync crashed', row.community_id, e instanceof Error ? e.message : 'error');
@@ -146,10 +150,5 @@ Deno.serve(async (req) => {
   if (!url) return json(req, { ok: false, error: 'No calendar link is set' } satisfies Outcome);
 
   const admin = adminClient();
-  const result = await syncOne(admin, communityId, url);
-  if (result === 'ok') return json(req, { ok: true } satisfies Outcome);
-  // Report the same line that was stored as last_error.
-  const { data: after } = await user.rpc('community_calendar', { p_community_id: communityId });
-  const stored = (after as { last_error?: string | null } | null)?.last_error;
-  return json(req, { ok: false, error: stored === TOO_LARGE ? TOO_LARGE : READ_FAILED } satisfies Outcome);
+  return json(req, (await syncOne(admin, communityId, url)) satisfies Outcome);
 });

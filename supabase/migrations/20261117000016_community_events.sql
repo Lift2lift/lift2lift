@@ -348,7 +348,7 @@ as $$
     'pending_requests', case when m.role = 'admin'
                           then (select count(*) from public.community_join_requests q where q.community_id = c.id and q.status = 'pending')
                           else 0 end,
-    'next_event', (select jsonb_build_object('id', e.id, 'title', e.title, 'starts_at', e.starts_at)
+    'next_event', (select jsonb_build_object('id', e.id, 'title', e.title, 'starts_at', e.starts_at, 'all_day', e.all_day)
                    from public.community_events e
                    where e.community_id = c.id and e.cancelled_at is null
                      and not public.event_is_over(e.starts_at, e.ends_at, e.all_day)
