@@ -2,7 +2,7 @@ import { TERMS_VERSION } from './legal';
 import type { Session as SupabaseSession, SupabaseClient } from '@supabase/supabase-js';
 import { friendlyError } from './errors';
 import { fetchForecast } from './forecast';
-import type { Api, BoardRide, SeatRequest, SeatStatus, ChatMessage, Community, CommunityPage, CommunityRole, JoinCommunityResult, PopularCommunity, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
+import type { Api, BoardRide, SeatRequest, SeatStatus, ChatMessage, Community, CommunityEvent, CommunityPage, CommunityRole, JoinCommunityResult, PopularCommunity, DriverVerification, FriendPerson, FriendState, Gender, PendingReview, PickedPhoto, ProfileFields, ProfilePage, RatingSummary, Review, SeatLegs, Session, Trip, TripType } from './types';
 
 type BoardRow = {
   id: string;
@@ -37,6 +37,8 @@ type BoardRow = {
   community_id: string | null;
   community_name: string | null;
   seats_pending?: number;
+  event_id?: string | null;
+  event_title?: string | null;
   my_seat_status?: SeatStatus | null;
   my_seat_legs?: SeatLegs | null;
 };
@@ -82,7 +84,7 @@ type VerificationRow = {
 const DOCS_BUCKET = 'driver-docs';
 
 const BOARD_COLUMNS =
-  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders, driver_driving_avg, driver_experience_avg, driver_review_count, trip_type, return_at, return_meet, seats_taken_to, seats_taken_from, rider_legs, community_id, community_name, seats_pending, my_seat_status, my_seat_legs';
+  'id, driver_id, driver_name, resort_id, depart_at, leave_from, seats_total, gas_per_rider, gear, notes, seats_taken, rider_ids, rider_names, ride_date, gas_cap, driver_verified, driver_avatar_path, driver_gender, rider_avatar_paths, rider_genders, driver_driving_avg, driver_experience_avg, driver_review_count, trip_type, return_at, return_meet, seats_taken_to, seats_taken_from, rider_legs, community_id, community_name, seats_pending, event_id, event_title, my_seat_status, my_seat_legs';
 
 function toSession(s: SupabaseSession | null): Session | null {
   if (!s) return null;
@@ -127,6 +129,8 @@ function toRide(r: BoardRow, urls: Record<string, string>): BoardRide {
     communityId: r.community_id ?? null,
     communityName: r.community_name ?? null,
     seatsPending: r.seats_pending ?? 0,
+    eventId: r.event_id ?? null,
+    eventTitle: r.event_title ?? null,
     myStatus: r.my_seat_status ?? null,
     myLegs: r.my_seat_legs ?? null,
   };
@@ -275,6 +279,7 @@ export function createApi(supabase: SupabaseClient): Api {
           notes: ride.notes,
           contact: ride.contact,
           community_id: ride.communityId,
+          event_id: ride.eventId,
         }),
       );
     },
@@ -318,6 +323,7 @@ export function createApi(supabase: SupabaseClient): Api {
         notes: String(r.notes ?? ''),
         contact: String(r.contact ?? ''),
         communityId: (r.community_id as string | null) ?? null,
+        eventId: (r.event_id as string | null) ?? null,
         rideDate: String(r.ride_date),
         riders: Number(r.riders),
         seatsTakenTo: Number(r.seats_taken_to),
@@ -341,6 +347,7 @@ export function createApi(supabase: SupabaseClient): Api {
             notes: ride.notes,
             contact: ride.contact,
             community_id: ride.communityId,
+            event_id: ride.eventId,
           })
           .eq('id', rideId)
           .select('id'),
@@ -350,7 +357,7 @@ export function createApi(supabase: SupabaseClient): Api {
 
     async myCommunities() {
       const { data } = check(await supabase.rpc('my_communities'));
-      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number };
+      type Row = { id: string; name: string; description: string; code: string | null; role: CommunityRole; listed: boolean; member_count: number; upcoming_rides: number; pending_requests: number; next_event: { id: string; title: string; starts_at: string; all_day: boolean } | null };
       return ((data ?? []) as Row[]).map(
         (c): Community => ({
           id: c.id,
@@ -362,6 +369,7 @@ export function createApi(supabase: SupabaseClient): Api {
           memberCount: Number(c.member_count),
           upcomingRides: Number(c.upcoming_rides),
           pendingRequests: Number(c.pending_requests ?? 0),
+          nextEvent: c.next_event ? { id: c.next_event.id, title: c.next_event.title, startsAt: c.next_event.starts_at, allDay: !!c.next_event.all_day } : null,
         }),
       );
     },
@@ -405,6 +413,107 @@ export function createApi(supabase: SupabaseClient): Api {
           requestedAt: q.requested_at,
         })),
       } satisfies CommunityPage;
+    },
+    async communityCalendar(communityId) {
+      const { data } = check(await supabase.rpc('community_calendar', { p_community_id: communityId }));
+      if (!data) return null;
+      const d = data as { ics_url: string; last_synced_at: string | null; last_error: string | null };
+      return { icsUrl: d.ics_url, lastSyncedAt: d.last_synced_at, lastError: d.last_error };
+    },
+    async setCommunityCalendar(communityId, url) {
+      check(await supabase.rpc('set_community_calendar', { p_community_id: communityId, p_url: url }));
+    },
+    async syncCommunityCalendar(communityId) {
+      const generic = "Couldn't sync the calendar. Try again.";
+      let result: { ok?: boolean; error?: unknown } | null = null;
+      try {
+        const { data, error } = await supabase.functions.invoke('sync-community-calendars', { body: { community_id: communityId } });
+        if (!error) result = data as { ok?: boolean; error?: unknown } | null;
+      } catch {
+        // fall through to the generic message
+      }
+      if (result?.ok === true) return;
+      throw new Error(result?.ok === false && typeof result.error === 'string' && result.error ? result.error : generic);
+    },
+    async communityEvents(communityId, fromDay, toDay) {
+      const { data } = check(await supabase.rpc('community_events', { p_community_id: communityId, p_from: fromDay, p_to: toDay }));
+      type P = { id: string; full_name: string; avatar_path: string | null; gender: Gender | null };
+      type Row = {
+        id: string;
+        community_id: string;
+        title: string;
+        description: string | null;
+        location: string | null;
+        resort_id: string | null;
+        starts_at: string;
+        ends_at: string;
+        all_day: boolean;
+        source: 'manual' | 'ics';
+        going: number;
+        i_am_in: boolean;
+        going_people: P[] | null;
+        ride_count: number;
+      };
+      const rows = (data ?? []) as Row[];
+      const urls = await signAvatars(rows.flatMap((e) => (e.going_people ?? []).map((p) => p.avatar_path)));
+      return rows.map(
+        (e): CommunityEvent => ({
+          id: e.id,
+          communityId: e.community_id,
+          title: e.title,
+          description: e.description ?? '',
+          location: e.location ?? '',
+          resortId: e.resort_id ?? null,
+          startsAt: e.starts_at,
+          endsAt: e.ends_at,
+          allDay: !!e.all_day,
+          source: e.source,
+          going: Number(e.going),
+          iAmIn: !!e.i_am_in,
+          goingPeople: (e.going_people ?? []).map((p) => ({
+            id: p.id,
+            name: p.full_name,
+            avatarUrl: p.avatar_path ? urls[p.avatar_path] ?? null : null,
+            gender: p.gender,
+          })),
+          rideCount: Number(e.ride_count ?? 0),
+        }),
+      );
+    },
+    async setEventRsvp(eventId, going) {
+      check(await supabase.rpc('set_event_rsvp', { p_event_id: eventId, p_going: going }));
+    },
+    async createCommunityEvent(communityId, event) {
+      const { data } = check(
+        await supabase.rpc('create_community_event', {
+          p_community_id: communityId,
+          p_title: event.title,
+          p_description: event.description,
+          p_location: event.location,
+          p_resort_id: event.resortId,
+          p_starts_at: event.startsAt,
+          p_ends_at: event.endsAt,
+          p_all_day: event.allDay,
+        }),
+      );
+      return data as string;
+    },
+    async updateCommunityEvent(eventId, event) {
+      check(
+        await supabase.rpc('update_community_event', {
+          p_event_id: eventId,
+          p_title: event.title,
+          p_description: event.description,
+          p_location: event.location,
+          p_resort_id: event.resortId,
+          p_starts_at: event.startsAt,
+          p_ends_at: event.endsAt,
+          p_all_day: event.allDay,
+        }),
+      );
+    },
+    async cancelCommunityEvent(eventId) {
+      check(await supabase.rpc('cancel_community_event', { p_event_id: eventId }));
     },
     async leaveCommunity(communityId) {
       check(await supabase.rpc('leave_community', { p_community_id: communityId }));

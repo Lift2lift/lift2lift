@@ -12,6 +12,8 @@ function Screen() {
       initialResort={q.get('resort') ?? undefined}
       editRideId={q.get('edit') ?? undefined}
       initialCommunity={q.get('community') ?? undefined}
+      initialEvent={q.get('event') ?? undefined}
+      initialDay={q.get('day') ?? undefined}
     />
   );
 }

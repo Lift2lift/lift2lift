@@ -1,4 +1,4 @@
--- Local development only: two demo accounts and a few sample rides.
+-- Local development only: two demo accounts, a few sample rides, and a club with three events.
 -- `supabase db reset` runs this after the migrations. Never run it in production.
 --
 --   driver@lift2lift.test / password123   (posts rides; driver verification approved)
@@ -9,6 +9,8 @@ declare
   v_driver uuid := '11111111-1111-4111-8111-111111111111';
   v_rider  uuid := '22222222-2222-4222-8222-222222222222';
   v_user   record;
+  v_club   uuid;
+  v_event  uuid;
 begin
   -- Local-only test domain so the demo accounts pass the CU email rule.
   insert into public.allowed_email_domains (domain) values ('lift2lift.test') on conflict do nothing;
@@ -71,5 +73,30 @@ begin
   -- The demo rider already has a seat on the first ride.
   insert into public.ride_seats (ride_id, rider_id)
   select id, v_rider from public.rides where resort_id = 'abasin' and driver_id = v_driver;
+
+  -- Both demo accounts are in CU Freeride (driver is its admin), with three sample events.
+  select id into v_club from public.communities where name = 'CU Freeride';
+  update public.communities set set_up_at = coalesce(set_up_at, now()), listed = false where id = v_club;
+  insert into public.community_members (community_id, user_id, role) values
+    (v_club, v_driver, 'admin'),
+    (v_club, v_rider, 'member');
+
+  insert into public.community_events (community_id, title, location, resort_id, starts_at, ends_at, source, created_by)
+  values (v_club, 'Copper dawn patrol', 'Center Village', 'copper',
+          (((now() at time zone 'America/Denver')::date + 4) + time '08:30') at time zone 'America/Denver',
+          (((now() at time zone 'America/Denver')::date + 4) + time '09:30') at time zone 'America/Denver', 'manual', v_driver)
+  returning id into v_event;
+
+  insert into public.community_events (community_id, title, location, starts_at, ends_at, source, created_by) values
+    (v_club, 'Wax night', 'Rec Center, room 110',
+     (((now() at time zone 'America/Denver')::date + 7) + time '19:00') at time zone 'America/Denver',
+     (((now() at time zone 'America/Denver')::date + 7) + time '21:00') at time zone 'America/Denver', 'manual', v_driver);
+
+  insert into public.community_events (community_id, title, location, resort_id, starts_at, ends_at, source, created_by) values
+    (v_club, 'Cabin weekend', 'Peak 7 cabin', 'breck',
+     (((now() at time zone 'America/Denver')::date + 17) + time '16:00') at time zone 'America/Denver',
+     (((now() at time zone 'America/Denver')::date + 19) + time '14:00') at time zone 'America/Denver', 'manual', v_driver);
+
+  insert into public.community_event_rsvps (event_id, user_id) values (v_event, v_driver), (v_event, v_rider);
 end;
 $$;

@@ -3,6 +3,7 @@ import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { Button, Card, Field, FormScreen, Label, Loading, Muted, Notice } from '../components/ui';
 import { cleanCode, COMMUNITY_CODE_LENGTH, formatCode } from '../lib/communities';
+import { dayLabel, denverDay, isoDay } from '../lib/dates';
 import { useTheme } from '../lib/theme';
 import type { Community, PopularCommunity } from '../lib/types';
 import { useApi, useNav } from '../providers';
@@ -12,6 +13,12 @@ import { useApi, useNav } from '../providers';
  * a brand-new code, name the community and become its admin), the
  * communities you're in, and Popular communities you can ask to join.
  */
+/** "on now" once the event has started; else its day ("Tomorrow", "Sat Dec 5"). All-day events use their Denver date. */
+function nextWhen(e: { startsAt: string; allDay: boolean }) {
+  if (+new Date(e.startsAt) <= Date.now()) return 'on now';
+  return dayLabel(e.allDay ? denverDay(e.startsAt) : isoDay(new Date(e.startsAt)));
+}
+
 export function CommunitiesScreen() {
   const t = useTheme();
   const api = useApi();
@@ -237,6 +244,11 @@ export function CommunitiesScreen() {
                   <Text style={{ color: t.muted, fontSize: 13 }}>
                     {c.memberCount} {c.memberCount === 1 ? 'member' : 'members'} · {c.upcomingRides} upcoming {c.upcomingRides === 1 ? 'ride' : 'rides'}
                   </Text>
+                  {c.nextEvent ? (
+                    <Text numberOfLines={1} style={{ color: t.ink, fontSize: 13, fontWeight: '700' }}>
+                      Next: {c.nextEvent.title} · {nextWhen(c.nextEvent)}
+                    </Text>
+                  ) : null}
                 </View>
                 {c.pendingRequests > 0 ? (
                   <View style={{ backgroundColor: t.accent, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 }}>

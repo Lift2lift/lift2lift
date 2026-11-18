@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { SetupModal } from '../components/SetupModal';
@@ -10,7 +10,7 @@ import { forecastFor } from '../lib/forecast';
 import { RESORT_BY_ID, RESORTS } from '../lib/resorts';
 import { CARPOOL_DISCLAIMER, earliestDeparture, MAX_PASSENGERS, maxGasPerRider, mileageCents, tripGasCap } from '../lib/rules';
 import { mySeatOn, oneWayShare, TRIP_LABEL } from '../lib/trips';
-import type { Community, EditableRide, TripType } from '../lib/types';
+import type { Community, CommunityEvent, EditableRide, TripType } from '../lib/types';
 import { useTheme } from '../lib/theme';
 import { useForecast } from '../lib/useForecast';
 import { canHost, type DriverVerification } from '../lib/types';
@@ -29,7 +29,19 @@ const hhmm = (iso: string) => {
 };
 
 /** Post a ride, or edit one you posted (`editRideId`). `initialCommunity` starts it as that community's ride. */
-export function PostRideScreen({ initialResort, editRideId, initialCommunity }: { initialResort?: string; editRideId?: string; initialCommunity?: string }) {
+export function PostRideScreen({
+  initialResort,
+  editRideId,
+  initialCommunity,
+  initialEvent,
+  initialDay,
+}: {
+  initialResort?: string;
+  editRideId?: string;
+  initialCommunity?: string;
+  initialEvent?: string;
+  initialDay?: string;
+}) {
   const t = useTheme();
   const api = useApi();
   const nav = useNav();
@@ -40,7 +52,7 @@ export function PostRideScreen({ initialResort, editRideId, initialCommunity }: 
   const lastDay = isoDay(addDays(new Date(), DAYS_AHEAD));
 
   const [resortId, setResortId] = useState(initialResort && RESORT_BY_ID[initialResort] ? initialResort : '');
-  const [day, setDay] = useState(nextSaturday());
+  const [day, setDay] = useState(() => (initialDay && /^\d{4}-\d{2}-\d{2}$/.test(initialDay) && initialDay >= today && initialDay <= lastDay ? initialDay : nextSaturday()));
   const [tripType, setTripType] = useState<TripType>('round_trip');
   const [time, setTime] = useState('06:30');
   const [returnTime, setReturnTime] = useState('16:00');
@@ -58,6 +70,37 @@ export function PostRideScreen({ initialResort, editRideId, initialCommunity }: 
   useEffect(() => {
     api.myCommunities().then(setCommunities).catch(() => {});
   }, [api]);
+  // Events of the chosen community on the chosen day, for the "For event" chips.
+  const [eventId, setEventId] = useState<string | null>(null);
+  const [loadedEvents, setLoadedEvents] = useState<{ key: string; list: CommunityEvent[] } | null>(null);
+  const pendingEvent = useRef(initialEvent && !editRideId ? initialEvent : null);
+  const eventsKey = communityId ? `${communityId}|${day}` : '';
+  useEffect(() => {
+    if (!communityId) return setLoadedEvents(null);
+    let stale = false;
+    api
+      .communityEvents(communityId, day, day)
+      .then((list) => {
+        if (stale) return;
+        setLoadedEvents({ key: `${communityId}|${day}`, list });
+        setEventId((prev) => {
+          if (prev && list.some((e) => e.id === prev)) return prev;
+          const want = pendingEvent.current;
+          if (want && list.some((e) => e.id === want)) {
+            pendingEvent.current = null;
+            return want;
+          }
+          return null;
+        });
+      })
+      .catch(() => {
+        if (!stale) setLoadedEvents(null);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [api, communityId, day]);
+  const eventList = loadedEvents && loadedEvents.key === eventsKey ? loadedEvents.list : [];
   const community = communityId ? communities.find((c) => c.id === communityId) ?? null : null;
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -86,6 +129,7 @@ export function PostRideScreen({ initialResort, editRideId, initialCommunity }: 
         setContact(r.contact);
         setNotes(r.notes);
         setCommunityId(r.communityId);
+        setEventId(r.eventId);
       })
       .catch((e: Error) => setEditError(e.message));
   }, [api, editRideId]);
@@ -175,6 +219,13 @@ export function PostRideScreen({ initialResort, editRideId, initialCommunity }: 
         notes: notes.trim().slice(0, 280),
         contact: contact.trim().slice(0, 60),
         communityId,
+        eventId: !communityId
+          ? null
+          : loadedEvents && loadedEvents.key === eventsKey
+            ? (eventList.some((e) => e.id === eventId) ? eventId : null)
+            : original && communityId === original.communityId && day === isoDay(new Date(original.departAt))
+              ? original.eventId
+              : null,
       };
       if (editRideId) {
         // Keep the exact original times when the picker didn't change them.
@@ -247,6 +298,19 @@ export function PostRideScreen({ initialResort, editRideId, initialCommunity }: 
               </Text>
             </>
           )}
+        </View>
+      ) : null}
+
+      {communityId && eventList.length ? (
+        <View style={{ gap: 8 }}>
+          <Label>For event</Label>
+          <ChipRow wrap>
+            <Chip label="No event" selected={!eventId} onPress={() => setEventId(null)} />
+            {eventList.map((e) => (
+              <Chip key={e.id} label={e.title} selected={eventId === e.id} onPress={() => setEventId(e.id)} />
+            ))}
+          </ChipRow>
+          <Text style={{ color: t.muted, fontSize: 13, lineHeight: 19 }}>Shows under the event so members can find a ride to it.</Text>
         </View>
       ) : null}
 
