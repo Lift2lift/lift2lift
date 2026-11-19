@@ -20,7 +20,6 @@ const emailProps = {
 /** "I agree to the Terms and Privacy policy", required to create an account. */
 function AgreeBox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   const t = useTheme();
-  const nav = useNav();
   return (
     <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
       <Pressable
@@ -35,13 +34,13 @@ function AgreeBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       </Pressable>
       <Text style={{ color: t.ink, fontSize: 14, lineHeight: 21, flex: 1 }}>
         I'm 18 or older and agree to the{' '}
-        <Text onPress={() => nav.push('/terms')} accessibilityRole="link" style={{ color: t.link, fontWeight: '700' }}>
+        <PageLink to="/terms" style={{ color: t.link, fontWeight: '700' }}>
           Terms and community guidelines
-        </Text>{' '}
+        </PageLink>{' '}
         (no tolerance for abusive content or users) and the{' '}
-        <Text onPress={() => nav.push('/privacy')} accessibilityRole="link" style={{ color: t.link, fontWeight: '700' }}>
+        <PageLink to="/privacy" style={{ color: t.link, fontWeight: '700' }}>
           Privacy policy
-        </Text>
+        </PageLink>
         .
       </Text>
     </View>
@@ -57,7 +56,10 @@ function PageLink({ to, children, style }: { to: '/terms' | '/privacy'; children
       accessibilityRole="link"
       style={style}
       onPress={(e) => {
-        e.preventDefault(); // on the web, move inside the app instead of reloading the page
+        // On the web this is the click itself: leave cmd, ctrl, shift and alt clicks to the browser (new tab or window).
+        const click = e as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+        if (click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+        e.preventDefault(); // otherwise move inside the app instead of reloading the page
         nav.push(to);
       }}
       {...webProps}
