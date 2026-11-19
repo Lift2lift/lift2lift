@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { Brand, Button, Field, FormScreen, Heading, Notice, TextLink } from '../components/ui';
 import { isSchoolEmail, MIN_PASSWORD_LENGTH, SCHOOL_EMAIL_ERROR } from '../lib/config';
 import { isValidEmail } from '../lib/errors';
@@ -20,7 +20,6 @@ const emailProps = {
 /** "I agree to the Terms and Privacy policy", required to create an account. */
 function AgreeBox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   const t = useTheme();
-  const nav = useNav();
   return (
     <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
       <Pressable
@@ -35,14 +34,71 @@ function AgreeBox({ checked, onChange }: { checked: boolean; onChange: (v: boole
       </Pressable>
       <Text style={{ color: t.ink, fontSize: 14, lineHeight: 21, flex: 1 }}>
         I'm 18 or older and agree to the{' '}
-        <Text onPress={() => nav.push('/terms')} accessibilityRole="link" style={{ color: t.link, fontWeight: '700' }}>
+        <PageLink to="/terms" style={{ color: t.link, fontWeight: '700' }}>
           Terms and community guidelines
-        </Text>{' '}
+        </PageLink>{' '}
         (no tolerance for abusive content or users) and the{' '}
-        <Text onPress={() => nav.push('/privacy')} accessibilityRole="link" style={{ color: t.link, fontWeight: '700' }}>
+        <PageLink to="/privacy" style={{ color: t.link, fontWeight: '700' }}>
           Privacy policy
-        </Text>
+        </PageLink>
         .
+      </Text>
+    </View>
+  );
+}
+
+/** A link to one of our own pages: a real <a href> on the web (so it works signed out, in a new tab, and for crawlers), a tap on iOS. */
+function PageLink({ to, children, style }: { to: '/terms' | '/privacy'; children: ReactNode; style?: StyleProp<TextStyle> }) {
+  const nav = useNav();
+  const webProps = Platform.OS === 'web' ? ({ href: to } as object) : null;
+  return (
+    <Text
+      accessibilityRole="link"
+      style={style}
+      onPress={(e) => {
+        // On the web this is the click itself: leave cmd, ctrl, shift and alt clicks to the browser (new tab or window).
+        const click = e as unknown as { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean };
+        if (click.metaKey || click.ctrlKey || click.shiftKey || click.altKey) return;
+        e.preventDefault(); // otherwise move inside the app instead of reloading the page
+        nav.push(to);
+      }}
+      {...webProps}
+    >
+      {children}
+    </Text>
+  );
+}
+
+/**
+ * What Lift2Lift is and what it does with Google data, for people who land on the website signed out.
+ * Web only: on iOS the App Store page says this.
+ */
+function About() {
+  const t = useTheme();
+  if (Platform.OS !== 'web') return null;
+  const p = { color: t.muted, fontSize: 14, lineHeight: 21 };
+  const link = { color: t.link, fontWeight: '600' as const };
+  return (
+    <View style={{ marginTop: 16, paddingTop: 24, borderTopWidth: 1, borderTopColor: t.line, gap: 10 }}>
+      <Text accessibilityRole="header" style={{ color: t.ink, fontSize: 17, fontWeight: '800' }}>
+        What is Lift2Lift?
+      </Text>
+      <Text style={p}>
+        Lift2Lift is a ski carpool board. Drivers post open seats to Colorado ski areas, riders request them, and every ride shows the snow forecast for that mountain on that day.
+      </Text>
+      <Text style={p}>Organizations get their own page, where members see the organization's events, say they're going and offer rides to them.</Text>
+      <Text style={p}>
+        <Text style={{ color: t.ink, fontWeight: '700' }}>Google Calendar. </Text>
+        An organization admin can connect a Google Calendar so the organization's events appear on its Lift2Lift page. Lift2Lift only reads the one calendar the admin picks, never changes anything in the Google account, and the admin can disconnect it at any time.
+      </Text>
+      <Text style={p}>
+        <PageLink to="/privacy" style={link}>
+          Privacy policy
+        </PageLink>
+        {'  ·  '}
+        <PageLink to="/terms" style={link}>
+          Terms
+        </PageLink>
       </Text>
     </View>
   );
@@ -137,12 +193,13 @@ export function SignInScreen() {
       <Button title="Sign in" onPress={submit} loading={loading} />
       <GoogleButton onError={setError} />
       <Text style={{ color: useTheme().muted, fontSize: 12, textAlign: 'center' }}>
-        By continuing you agree to the <Text onPress={() => nav.push('/terms')} style={{ textDecorationLine: 'underline' }}>Terms</Text> and{' '}
-        <Text onPress={() => nav.push('/privacy')} style={{ textDecorationLine: 'underline' }}>Privacy policy</Text>.
+        By continuing you agree to the <PageLink to="/terms" style={{ textDecorationLine: 'underline' }}>Terms</PageLink> and{' '}
+        <PageLink to="/privacy" style={{ textDecorationLine: 'underline' }}>Privacy policy</PageLink>.
       </Text>
       <Footer>
         New here? <TextLink onPress={() => nav.push('/sign-up')}>Create an account</TextLink>
       </Footer>
+      <About />
     </FormScreen>
   );
 }
