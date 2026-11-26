@@ -14,6 +14,7 @@
     },
     "production": {
       "autoIncrement": true,
+      "ios": { "image": "sdk-54" },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://vpkxesucfaofwazqgpni.supabase.co"
       }
@@ -21,7 +22,7 @@
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": { "ascAppId": "6833652448" }
     }
   }
 }
