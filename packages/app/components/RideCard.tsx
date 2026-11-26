@@ -259,9 +259,6 @@ export function RideCard({
           alignItems: 'center',
           justifyContent: 'center',
           paddingVertical: 14,
-          borderRightWidth: 2,
-          borderRightColor: t.line,
-          borderStyle: 'dashed',
         }}
         accessibilityLabel={`${DOW[d.getDay()]} ${MON[d.getMonth()]} ${d.getDate()}`}
       >
@@ -269,6 +266,7 @@ export function RideCard({
         <Text style={{ color: t.ink, fontSize: 36, fontWeight: '900', lineHeight: 40 }}>{d.getDate()}</Text>
         <Text style={{ color: t.ink, fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>{MON[d.getMonth()].toUpperCase()}</Text>
       </View>
+      <DashedRule color={t.line} />
 
       <View style={{ flex: 1, padding: 14, gap: 8, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
@@ -381,9 +379,10 @@ export function RideCard({
                   style={{
                     width: 15,
                     height: 17,
-                    borderRadius: 4,
-                    borderBottomLeftRadius: 6,
-                    borderBottomRightRadius: 6,
+                    // iOS only draws a dashed border when every corner matches, so a held seat gets even corners.
+                    borderRadius: held ? 5 : 4,
+                    borderBottomLeftRadius: held ? 5 : 6,
+                    borderBottomRightRadius: held ? 5 : 6,
                     borderWidth: 2,
                     borderStyle: held ? 'dashed' : 'solid',
                     borderColor: rid === me || myHold ? t.accent : held ? t.muted : t.ink,
@@ -539,3 +538,15 @@ function WeatherChip({ wx }: { wx: ReturnType<typeof forecastFor> }) {
 }
 
 const firstOf = (name: string | undefined) => (name ?? '').split(' ')[0] || 'A friend';
+
+/**
+ * A vertical dashed line. iOS can't draw a dashed border on one side only (it falls back to solid
+ * with a warning), so this clips a fully dashed box down to its left edge.
+ */
+function DashedRule({ color }: { color: string }) {
+  return (
+    <View style={{ width: 2, alignSelf: 'stretch', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', top: -2, bottom: -2, left: 0, width: 8, borderWidth: 2, borderStyle: 'dashed', borderColor: color }} />
+    </View>
+  );
+}

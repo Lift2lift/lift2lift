@@ -54,6 +54,15 @@ function IconButton({ label, active, onPress, children }: { label: string; activ
   );
 }
 
+/**
+ * Tile name size: 16, smaller when one word is too long for the 130pt line, so
+ * BRECKENRIDGE shrinks to fit instead of breaking mid-word.
+ */
+function nameSize(name: string): number {
+  const longest = Math.max(...name.split(/\s+/).map((w) => w.length));
+  return Math.min(16, Math.floor(130 / (longest * 0.78)));
+}
+
 function Tile({ stat, rank, metric, sub, onPress }: { stat: Stat; rank: number; metric: string; sub: string; onPress: () => void }) {
   const t = useTheme();
   const has = stat.rides > 0;
@@ -87,7 +96,7 @@ function Tile({ stat, rank, metric, sub, onPress }: { stat: Stat; rank: number; 
           <Text style={{ color: t.muted, fontSize: 11, fontWeight: '700' }}>No rides</Text>
         )}
       </View>
-      <Text numberOfLines={2} style={{ color: t.ink, fontSize: 16, fontWeight: '900', textTransform: 'uppercase', marginTop: 2 }}>
+      <Text numberOfLines={2} style={{ color: t.ink, fontSize: nameSize(stat.resort.name), fontWeight: '900', textTransform: 'uppercase', marginTop: 2 }}>
         {stat.resort.name}
       </Text>
       <Text numberOfLines={1} style={{ color: t.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.4 }}>
