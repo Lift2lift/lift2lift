@@ -22,7 +22,7 @@
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": { "ascAppId": "6833652448" }
     }
   }
 }
